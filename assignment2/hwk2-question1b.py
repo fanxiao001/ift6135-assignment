@@ -40,8 +40,8 @@ class MLP_dropout(nn.Module):
             nn.Linear(784,800),
             nn.ReLU(),
             nn.Linear(800,800),
-            nn.ReLU(),
             nn.Dropout(p=0.5),
+            nn.ReLU(),
             nn.Linear(800,10)
         )
 
@@ -120,8 +120,8 @@ def evaluate2(num_mask) :
     testloader = torch.utils.data.DataLoader(mnist_test, batch_size = len(mnist_test), shuffle=False, num_workers=2)
     N = num_mask
     outputs = torch.zeros(len(mnist_test),10)
+    model.train()
     for mask in range(N) :
-        model.train()
         for batch_idx, (inputs, targets) in enumerate(testloader): 
             if cuda:
                 inputs, targets = inputs.cuda(), targets.cuda()
