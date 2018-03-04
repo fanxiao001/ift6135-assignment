@@ -34,7 +34,7 @@ from PIL import Image
 
 import matplotlib.pyplot as plt
 
-#set path and load mnist data
+#set path and load data
 # os.chdir("/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/assignment2")
 # os.chdir("/Users/fanxiao/Google Drive/UdeM/IFT6135 Representation Learning/homework1/programming part ")
 print(os.getcwd())
@@ -46,12 +46,12 @@ print(os.getcwd())
 IMAGES_ROOT = 'datasets/PetImages'
 MY_TEST_ROOT = 'datasets/my_test'
 MODEL_SAVE_PATH='output'
-MODEL_SAVE_INTERVAL = 3
+MODEL_SAVE_INTERVAL = 5
 
 # hyper parameters of Deep learning
 IMAGE_RESIZE=64
 TRAIN_SIZE = 20000
-VALID_SIZE = 5000
+VALID_SIZE = 4990
 EPOCH_NUM = 100
 BATCH_SIZE_TRAIN=25
 BATCH_SIZE_VALID=50
@@ -183,7 +183,7 @@ class Model_A(nn.Module):
 
 
     def adjust_lr(self, optimizer, epoch, total_epochs):
-        lr = lr0 * (0.1 ** (epoch / float(total_epochs)))
+        lr = LR_0 * (0.1 ** (epoch / float(total_epochs)))
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
 
@@ -305,7 +305,7 @@ class Model_A(nn.Module):
 
             # print the process of the training.  
             if display!=0 and ep % display==0:
-                print('Epoch : %d, Train Acc : %.3f, Test Acc : %.3f' % (ep, 100.*train_acc, 100.*valid_acc))
+                print('Epoch : %d, Train Acc : %.3f, Test Acc : %.3f, Spend:%.3f minutes' % (ep, 100.*train_acc, 100.*valid_acc,(end-start)/60.0))
                 print('--------------------------------------------------------------')
 
             if ep % MODEL_SAVE_INTERVAL == 0:
@@ -322,12 +322,12 @@ Train Model A
 model = Model_A()
 train_acc_list, valid_acc_list=model.train_model()
 
-print('model a')
+print('Accuracy of model A:')
 print(train_acc_list)
 print(valid_acc_list)
 
 #%%
-plot accuracy as a function of epoch
+#plot accuracy as a function of epoch
 plt.figure()
 plt.plot(range(1,EPOCH_NUM+1),train_acc_list,label='Training')
 plt.plot(range(1,EPOCH_NUM+1),valid_acc_list,label='Validation')
@@ -395,12 +395,12 @@ Train Model B
 modelb = Model_B()
 train_acc_list, valid_acc_list=modelb.train_model()
 
-print('model b')
+print('Accuracy of model B:')
 print(train_acc_list)
 print(valid_acc_list)
 
 #%%
-plot accuracy as a function of epoch
+#plot accuracy as a function of epoch
 plt.figure()
 plt.plot(range(1,EPOCH_NUM+1),train_acc_list,label='Training')
 plt.plot(range(1,EPOCH_NUM+1),valid_acc_list,label='Validation')
