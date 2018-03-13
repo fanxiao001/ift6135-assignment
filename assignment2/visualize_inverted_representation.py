@@ -21,7 +21,7 @@ os.chdir("/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de repr
 # os.chdir("/Users/fanxiao/Google Drive/UdeM/IFT6135 Representation Learning/homework1/programming part ")
 print(os.getcwd())
 
-from misc_functions import recreate_image,preprocess_image
+# from misc_functions import recreate_image,preprocess_image
 
 
 def convert_to_grayscale(cv2im):
@@ -166,13 +166,14 @@ def get_positive_negative_saliency(gradient):
 '''
 Visualization: representation of inverte the certain layer output
 '''
+
 #%%
 class InvertedRepresentation():
     def __init__(self, model):
         self.model = model
         self.model.eval()
-        if not os.path.exists('./generated'):
-            os.makedirs('./generated')
+        if not os.path.exists('./generated_inv'):
+            os.makedirs('./generated_inv')
 
     def alpha_norm(self, input_matrix, alpha):
         """
@@ -250,7 +251,8 @@ class InvertedRepresentation():
             output = self.get_output_from_specific_layer(opt_img, target_layer)
             # print(input_image_layer_output)
             # Calculate euclidian loss
-            euc_loss = 1e-1 * self.euclidian_loss(input_image_layer_output.detach(), output)
+            # euc_loss = 1e-1 * self.euclidian_loss(input_image_layer_output.detach(), output)
+            euc_loss = 1e-2 * self.euclidian_loss(input_image_layer_output.detach(), output)
             # Calculate alpha regularization
             reg_alpha = alpha_reg_lambda * self.alpha_norm(opt_img, alpha_reg_alpha)
             # Calculate total variation regularization
@@ -269,8 +271,10 @@ class InvertedRepresentation():
                 for param_group in optimizer.param_groups:
                     param_group['lr'] *= 1/10
 
+            if loss.data.numpy()>5000: break
+
         x = recreate_image(opt_img)
-        cv2.imwrite('./generated/'+out_name+'_Inv_Image_Layer_' + str(target_layer) +
+        cv2.imwrite('./generated_inv/'+out_name+'_Inv_Image_Layer_' + str(target_layer) +
                             '_Iteration_' + str(i) + '.jpg', x)
 
 #%%
@@ -279,10 +283,9 @@ class InvertedRepresentation():
 # target_example = 0  # Snake
 
 # Pick one of the examples
-example_list = [
-                ['./images4visualize/half_half.png', 1],
-                ['./images4visualize/high_prob_correct.png', 0],
-                ['./images4visualize/high_prob_wrong.png', 0]]
+example_list = [['./images4visualize/half_half.png', 1],
+                ['./images4visualize/high_prob_wrong.png', 0],
+                ['./images4visualize/high_prob_correct.png', 0]]
 
 checkpoint = torch.load('./checkpoint/vgg16_x', map_location='cpu')
 net = checkpoint['net']
@@ -305,7 +308,7 @@ for example in example_list:
 
     inverted_representation = InvertedRepresentation(pretrained_model)
     image_size = 64  # width & height
-    target_layer = 9
+    target_layer = 10
     print('---start--')
     inverted_representation.generate_inverted_image_specific_layer \
         (prep_img,image_size,target_layer,file_name_to_export)
