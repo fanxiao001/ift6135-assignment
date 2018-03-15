@@ -5,7 +5,17 @@ Created on Sat Nov 18 23:12:08 2017
 """
 #%%
 import cv2
+
 import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+import torch.backends.cudnn as cudnn
+
+import torchvision
+import torchvision.transforms as transforms
+import torch.utils.data.sampler as sampler
+
 from torch.autograd import Variable
 from torch.optim import SGD
 
@@ -24,6 +34,53 @@ os.chdir("/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de repr
 print(os.getcwd())
 
 # from misc_functions import recreate_image,preprocess_image
+
+class FineTuneModel(nn.Module):
+    def __init__(self, original_model, arch, num_classes):
+        super(FineTuneModel, self).__init__()
+
+        if arch.startswith('alexnet') :
+            self.features = original_model.features
+            self.classifier = nn.Sequential(
+                nn.Dropout(),
+                nn.Linear(256 * 6 * 6, 4096),
+                nn.ReLU(inplace=True),
+                nn.Dropout(),
+                nn.Linear(4096, 4096),
+                nn.ReLU(inplace=True),
+                nn.Linear(4096, num_classes),
+            )
+            self.modelName = 'alexnet'
+        elif arch.startswith('resnet') :
+            # Everything except the last linear layer
+            self.features = nn.Sequential(*list(original_model.children())[:-1])
+            self.classifier = nn.Sequential(
+                nn.Linear(512, num_classes)
+            )
+            self.modelName = 'resnet'
+        elif arch.startswith('vgg16'):
+            self.features = original_model.features
+            self.classifier = nn.Sequential(
+                nn.Dropout(),
+                nn.Linear(25088, 4096),
+                nn.ReLU(inplace=True),
+                nn.Dropout(),
+                nn.Linear(4096, 4096),
+                nn.ReLU(inplace=True),
+                nn.Linear(4096, num_classes),
+            )
+            self.modelName = 'vgg16'
+        else :
+            raise("Finetuning not supported on this architecture yet")
+
+        # Freeze those weights
+        for p in self.features.parameters():
+            p.requires_grad = False
+        for p in self.classifier.parameters():
+            p.requires_grad = False
+        for p in self.classifier[6].parameters():
+            p.requires_grad = True
+
 
 
 def convert_to_grayscale(cv2im):
@@ -226,9 +283,9 @@ class CNNLayerVisualization():
             # Update image
             optimizer.step()
             # Recreate image
-            self.created_image = recreate_image(self.processed_image)
         
         # Save image
+        self.created_image = recreate_image(self.processed_image)
         cv2.imwrite('./generated_filter/filter_vis_Layer' + str(self.selected_layer) +
                     '_f' + str(self.selected_filter) + '_iter'+str(i)+'.jpg',
                     self.created_image)
@@ -266,9 +323,9 @@ class CNNLayerVisualization():
             # Update image
             optimizer.step()
             # Recreate image
-            self.created_image = recreate_image(self.processed_image)
 
-            # Save image
+        # Save image
+        self.created_image = recreate_image(self.processed_image)
         cv2.imwrite('./generated_filter/filter_vis_Layer' + str(self.selected_layer) +
                             '_f' + str(self.selected_filter) + '_iter'+str(i)+'.jpg',
                             self.created_image)
@@ -277,7 +334,6 @@ class CNNLayerVisualization():
 # cnn_layer = 17
 # filter_pos = 0
 # # Fully connected layer is not needed
-# pretrained_model = models.vgg16(pretrained=True).features
 # layer_vis = CNNLayerVisualization(pretrained_model, cnn_layer, filter_pos)
 # # Layer visualization with pytorch hooks
 # # layer_vis.visualise_layer_with_hooks()
@@ -285,22 +341,27 @@ class CNNLayerVisualization():
 # layer_vis.visualise_layer_without_hooks()
 
 
-checkpoint = torch.load('./checkpoint/vgg16_x', map_location='cpu')
+# pretrained_model = models.vgg16(pretrained=True)
+# checkpoint = torch.load('./checkpoint/vgg16_3', map_location='cpu')
+checkpoint = torch.load('./checkpoint/vgg16_x', map_location='cpu')  #vgg16_x,resnet152
 net = checkpoint['net']
 best_acc = checkpoint['acc']
 start_epoch = checkpoint['epoch']
 print ('Best validation acc : %.3f' % (best_acc))
 
-# for param in net.parameters():
-#     param.requires_grad = False
+# # for param in net.parameters():
+# #     param.requires_grad = False
 
 # net = models.vgg16(pretrained=True)
+# pretrained_model=net.features.module #vgg16_3 FineTuneModel
+
 pretrained_model=net.features
 print(pretrained_model)
-for layer in range(17,45,1):
+for layer in range(0,45,1):
     # torch.nn.modules.conv.Conv2d
     if type(pretrained_model[layer])==torch.nn.modules.conv.Conv2d:
         # print(pretrained_model.features[layer].weight.size(0))
         for f in range(pretrained_model[layer].weight.size(0)):
             layer_vis = CNNLayerVisualization(pretrained_model, layer, f)
             layer_vis.visualise_layer_without_hooks()
+            if f>10: break
