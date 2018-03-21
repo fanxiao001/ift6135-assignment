@@ -61,7 +61,7 @@ memory_m = 20 #attrib(default=20, convert=int)
 #total of the batch 
 total_batches = 1000 #attrib(default=50000, convert=int)
 #in each batch, there are batch_size sequences together as same length of sequence.
-batch_size = 1000 #attrib(default=1, convert=int)
+batch_size = 200 #attrib(default=1, convert=int)
 rmsprop_lr = 1e-4 #attrib(default=1e-4, convert=float)
 rmsprop_momentum = 0.9 #attrib(default=0.9, convert=float)
 rmsprop_alpha = 0.95 #attrib(default=0.95, convert=float)
@@ -85,13 +85,13 @@ class Model_LSTM(nn.Module):
         super(Model_LSTM, self).__init__()
 
         self.copy_machine=nn.LSTM(9, 100)
-        #hidden=hidden_t,cell_t
-        # self.hidden = self.init_hidden(batch_size)
         self.mlp=nn.Linear(100,9)
 
     def init_hidden(self,batch_size):
         self.hidden= ( autograd.Variable(torch.randn(1, batch_size, 100)),\
           autograd.Variable(torch.randn((1, batch_size, 100))) )
+        if cuda_available:
+            self.hidden=self.hidden.cuda()
 
     def forward(self, sequence):
         # out, (self.hidden, self.cell) = self.copy_machine(inputs, None)
@@ -110,7 +110,7 @@ def gen1seq():
     return seq
 
 def gen1seq_act(length):
-    seq=torch.zeros(9*length).view(length, 1, -1)
+    seq=torch.zeros(9*length).view(length, 1, -1)+0.5
     seq[:,:,-1]=0.0
     seq[-1]=0.0
     seq[-1,-1,-1]=1.0
@@ -136,7 +136,9 @@ def dataloader(total_batches,
         inp[seq_len, :, seq_width] = 1.0 # delimiter in our control channel
         outp = seq.clone()
 
+        seq2 = Variable(torch.zeros(seq_len, batch_size, seq_width)+0.5)
         act_inp = Variable(torch.zeros(seq_len + 1, batch_size, seq_width + 1))
+        act_inp[:seq_len, :, :seq_width] = seq2
         act_inp[seq_len, :, seq_width] = 1.0 
 
         yield batch_num+1, inp.float(), outp.float(), act_inp.float()
@@ -167,9 +169,10 @@ def train_model(model, seqs_loader, display=200):
         optimizer.zero_grad()
         model.hidden = model.init_hidden(batch_size)
         # print(x.size(),y.size(),act.size())
-        # after input all sequence, generate new sequence.
+        #input data
         model.forward(x)
         # do copy in useing the act_seq
+        # model.hidden = model.init_hidden(batch_size)
         out_seq=model.forward(act)
 
         out_seq=out_seq[:-1,:,:-1]
@@ -180,9 +183,11 @@ def train_model(model, seqs_loader, display=200):
 
         losses.append(loss.data[0])
         out_binarized = sigmoid_out.clone().data.numpy()
-        out_binarized=np.sign(out_binarized-0.5)
+        out_binarized=np.where(out_binarized>0.5,1,0)
         # The cost is the number of error bits per sequence
-        cost = np.sum(np.abs(out_binarized - y.data.numpy()))/(x.size(0)*x.size(1)*x.size(2))
+        cost = np.sum(np.abs(out_binarized - y.data.numpy()))/(y.size(0)*y.size(1)*y.size(2))
+        # cost = np.sum(np.abs(out_binarized - y.data.numpy()))
+
         costs.append(cost)
 
         # end = time.time()
@@ -233,7 +238,9 @@ print(test1)
 model.init_hidden(1)
 model.forward(test1)
 actx=Variable(gen1seq_act(test1.size(0)))
+# model.init_hidden(1)
 print(torch.sigmoid(model.forward(actx)))
-actx=Variable(gen1seq_act(test1.size(0)))
+# actx=Variable(gen1seq_act(test1.size(0)))
+# model.init_hidden(1)
 print(torch.sigmoid(model.forward(actx)))
 
