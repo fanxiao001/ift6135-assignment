@@ -95,7 +95,6 @@ def init_seed(seed=123):
     random.seed(seed)
     
 #%%
-
 def train(model, train_data_loader, criterion, optimizer,  interval = 1000, display = True) : 
     list_seq_num = []
     list_loss = []
@@ -119,11 +118,9 @@ def train(model, train_data_loader, criterion, optimizer,  interval = 1000, disp
         for i in range(outp_seq_len):
             y_out[i], hidden = model(Variable(torch.zeros(1,batch_size, output_size+1)),hidden)
         
-#        length = outp_seq_len * batch_size
         length = batch_size
         lengthes +=  length
     
-#            y_out = tag_scores[:outp_seq_len,:] #remove end of sequence indicator
         loss = criterion(y_out, Y)      # calculate loss
         losses += loss
         
@@ -138,16 +135,15 @@ def train(model, train_data_loader, criterion, optimizer,  interval = 1000, disp
         optimizer.step()
         
         if batch_num % interval == 0  :
-            list_loss.append(losses.data/lengthes)
+            list_loss.append(losses.data/interval/batch_size)
             list_seq_num.append(lengthes/1000) # per thousand
-            list_cost.append(costs/lengthes)
+            list_cost.append(costs/interval/batch_size)
 
         
         if display and (batch_num % interval == 0 ): 
-            print ("Epoch %d, loss %f, cost %f" % (batch_num, losses/lengthes, costs/lengthes) )
+            print ("Epoch %d, loss %f, cost %f" % (batch_num, losses/interval/batch_size, costs/interval/batch_size) )
             costs = 0
-            losses = 0
-            
+            losses = 0        
             
     return list_seq_num, list_loss, list_cost
 
