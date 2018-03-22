@@ -145,6 +145,22 @@ def dataloader(total_batches,
                seq_width,
                min_len,
                max_len):
+    """Generator of random sequences for the copy task.
+
+    Creates random batches of "bits" sequences.
+
+    All the sequences within each batch have the same length.
+    The length is [`min_len`, `max_len`]
+
+    :param num_batches: Total number of batches to generate.
+    :param seq_width: The width of each item in the sequence.
+    :param batch_size: Batch size.
+    :param min_len: Sequence minimum length.
+    :param max_len: Sequence maximum length.
+
+    NOTE: The input width is `seq_width + 1`, the additional input
+    contain the delimiter.
+    """
     for batch_num in range(total_batches):
 
         # All batches have the same sequence length
@@ -328,7 +344,7 @@ plt.plot(list_seq_num,list_cost)
 plt.xlabel('Sequence number')
 plt.ylabel('Cost per sequence')
 plt.legend()
-# plt.savefig('lstm1.pdf')
+plt.savefig('lstm-xx.pdf')
 plt.show()
 
 #plot accuracy as a function of epoch
