@@ -95,7 +95,6 @@ def init_seed(seed=123):
     random.seed(seed)
     
 #%%
-
 def train(model, train_data_loader, criterion, optimizer,  interval = 1000, display = True) : 
     list_seq_num = []
     list_loss = []
@@ -119,11 +118,9 @@ def train(model, train_data_loader, criterion, optimizer,  interval = 1000, disp
         for i in range(outp_seq_len):
             y_out[i], hidden = model(Variable(torch.zeros(1,batch_size, output_size+1)),hidden)
         
-#        length = outp_seq_len * batch_size
         length = batch_size
         lengthes +=  length
     
-#            y_out = tag_scores[:outp_seq_len,:] #remove end of sequence indicator
         loss = criterion(y_out, Y)      # calculate loss
         losses += loss
         
@@ -138,16 +135,15 @@ def train(model, train_data_loader, criterion, optimizer,  interval = 1000, disp
         optimizer.step()
         
         if batch_num % interval == 0  :
-            list_loss.append(losses.data/lengthes)
+            list_loss.append(losses.data/interval/batch_size)
             list_seq_num.append(lengthes/1000) # per thousand
-            list_cost.append(costs/lengthes)
+            list_cost.append(costs/interval/batch_size)
 
         
         if display and (batch_num % interval == 0 ): 
-            print ("Epoch %d, loss %f, cost %f" % (batch_num, losses/lengthes, costs/lengthes) )
+            print ("Epoch %d, loss %f, cost %f" % (batch_num, losses/interval/batch_size, costs/interval/batch_size) )
             costs = 0
-            losses = 0
-            
+            losses = 0        
             
     return list_seq_num, list_loss, list_cost
 
@@ -171,7 +167,7 @@ def evaluate(model, test_data_loader, criterion) :
         for i in range(outp_seq_len):
             y_out[i], hidden = model(Variable(torch.randn(1,batch_size, output_size+1)),hidden)
                 
-        length = outp_seq_len * batch_size
+        length =  batch_size
         lengthes += length
     
 #            y_out = tag_scores[:outp_seq_len,:] #remove end of sequence indicator
@@ -220,8 +216,8 @@ MIN_LENGTH = 1
 MAX_LENGTH = 20
 LEARNING_RATE = 3e-5
 MOMENTUM = 0.9 
-MINI_BATCH = 100
-EPOCH = 10000
+MINI_BATCH = 20
+EPOCH = 50000
 
 model = LSTMCopy(NUM_BITS+1,LSTM_DIM,NUM_BITS,1,MINI_BATCH)
 
@@ -230,15 +226,18 @@ optimizer = optim.RMSprop(model.parameters(), lr=LEARNING_RATE, momentum = MOMEN
 
 train_data_loader = dataloader(EPOCH,MINI_BATCH,NUM_BITS,MIN_LENGTH,MAX_LENGTH)
 
-list_seq_num, list_loss, list_cost = train(model, train_data_loader, loss_function, optimizer, interval=100)
+list_seq_num, list_loss, list_cost = train(model, train_data_loader, loss_function, optimizer, interval=500)
 
 #%%
 plt.plot(list_seq_num,list_cost)
+plt.xlabel('sequence number (thousands)')
+plt.ylabel('cost per sequence (bits)')
 #%%
-saveCheckpoint(model,list_seq_num,list_loss, list_cost, path='lstm3_l1_b100_e10000') 
+saveCheckpoint(model,list_seq_num,list_loss, list_cost, path='lstm3_l1_b20_e50000') 
 
 #%%
-model, list_seq_num, list_loss, list_cost = loadCheckpoint(path='lstm3')
+#model, list_seq_num, list_loss, list_cost = loadCheckpoint(path='lstm3_l1_b100_e10000')
+model, list_seq_num, list_loss, list_cost = loadCheckpoint(path='lstm3_l1_b20_e50000')
 #%%
 list_avg_loss = []
 list_avg_cost = []
