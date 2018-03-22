@@ -42,27 +42,43 @@ REPORT_INTERVAL = 200
 CHECKPOINT_INTERVAL = 100 #1000
 CHECKPOINT_PATH='../checkpoint/'
 
-controller_size = 100 #attrib(default=100, convert=int)
-controller_layers = 1 #attrib(default=1,convert=int)
-num_heads = 1 #attrib(default=1, convert=int)
-BYTE_WIDTH = 8 #attrib(default=8, convert=int)
-HIDDEN_NUM=100
-SEQUENCE_MIN_LEN = 1 #attrib(default=1,convert=int)
-SEQUENCE_MAX_LEN = 20 #attrib(default=20, convert=int)
-memory_n = 128 #attrib(default=128, convert=int)
-memory_m = 20 #attrib(default=20, convert=int)
-#total of the batch 
-TOTAL_BATCHES = 300 #attrib(default=50000, convert=int)
-#in each batch, there are batch_size sequences together as same length of sequence.
-BATCH_SIZE = 200 #attrib(default=1, convert=int)
-rmsprop_lr = 1e-4 #attrib(default=1e-4, convert=float)
-rmsprop_momentum = 0.9 #attrib(default=0.9, convert=float)
-rmsprop_alpha = 0.95 #attrib(default=0.95, convert=float)
+controller_size = 100 
+controller_layers = 1 
+num_heads = 1 
+memory_n = 128 
+memory_m = 20 
+
+rmsprop_lr = 3e-4 #paper=3e-5
+rmsprop_momentum = 0.9 
+rmsprop_alpha = 0.95 
 # BATCH_SIZE_TRAIN=25
 # BATCH_SIZE_VALID=50
 LR_0=0.1 #4e-4
 MOMENTUM=0.9
 WEIGHT_DECAY=5e-4
+
+
+'''
+Because of LSTM has poor memory while sequence lengths >=20 However, 
+memory capacity is inversely proportional to the length of the sequence.
+But for longer sequences and shorter sequences, they cannot be compared 
+exactly in proportion to the number of remembered bits because long sequences
+can be more difficult. Therefore, the way we calculate the cost is to generate 
+random sequence lengths and sequence sizes of batch_size randomly according to 
+intervals of interval values. The sequence length averaged by the interval 
+number should be similar. At this time, calculate the cost after the average 
+nterval is used to test whether the cost convergence.
+TOTAL_BATCHES is a multiple of INTERVAL.
+'''
+INTERVAL=100
+TOTAL_BATCHES = 20000
+#in each batch, there are batch_size sequences together as same length of sequence.
+BATCH_SIZE = 50
+SEQUENCE_MIN_LEN = 1 
+SEQUENCE_MAX_LEN = 20
+
+BYTE_WIDTH = 8 
+HIDDEN_NUM=100
 
 loss_function = nn.BCELoss()
 
@@ -148,7 +164,7 @@ def dataloader(total_batches,
 
         yield batch_num+1, inp.float(), outp.float(), act_inp.float()
 
-def train_model(model, seqs_loader, display=100):
+def train_model(model,criterion,optimizer, seqs_loader, interval=500):
     
     # in_seqs=[ gen1seq() for i in range(SEQS_TOTAL)]
     
@@ -156,12 +172,7 @@ def train_model(model, seqs_loader, display=100):
     if cuda_available:
         model = model.cuda()
 
-    criterion = loss_function  #nn.CrossEntropyLoss() nn.MSELoss() nn.BCELoss()
-    # optimizer = optim.SGD(model.parameters(), lr=LR_0)
-    # optimizer = optim.SGD(model.parameters(), lr=LR_0, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
-    # optimizer = optim.Adam(model.parameters(), lr=LR_0)
-    optimizer = optim.RMSprop(model.parameters(), lr=3e-5, momentum = MOMENTUM)
-    
+    # optimizer = optim.RMSprop(model.parameters(), lr=rmsprop_lr, momentum = MOMENTUM)
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 200], gamma=0.1)
 
     #training
@@ -169,8 +180,11 @@ def train_model(model, seqs_loader, display=100):
     list_losses =[]
     list_costs =[]
     list_bits=[]
-    list_batch_num = []
-    for i,(batch_num, X, Y, act) in enumerate(seqs_loader):
+    list_seq_num=[]
+    losses=0
+    costs=0
+    lengthes=0
+    for batch_num, X, Y, act in seqs_loader:
         # start = time.time()
         if cuda_available:
             X, Y, act = X.cuda(), Y.cuda(), act.cuda()
@@ -194,25 +208,41 @@ def train_model(model, seqs_loader, display=100):
         out_binarized=np.where(out_binarized>0.5,1,0)
         # The cost is the number of error bits per sequence
         cost = np.sum(np.abs(out_binarized - Y.data.numpy()))
-        list_costs.append(cost/BATCH_SIZE) #per sequence
-        list_bits.append(Y.size(0)*Y.size(1)*Y.size(2))
-        list_batch_num.append(i)
+
+        losses+=loss
+        costs+=cost
+        lengthes+=BATCH_SIZE
         # end = time.time()
 
-        # print the process of the training.  
-        if display!=0 and (i % display==0 or i==(TOTAL_BATCHES-1)):
-            print("Batch %d, Train Loss %f, Train Cost %f" % (i,list_losses[-1],list_costs[-1]))
-            # print(targ_seq,out_seq)
+        '''
+        Because of LSTM has poor memory while sequence lengths >=20 However, 
+        memory capacity is inversely proportional to the length of the sequence.
+        But for longer sequences and shorter sequences, they cannot be compared 
+        exactly in proportion to the number of remembered bits because long sequences
+        can be more difficult. Therefore, the way we calculate the cost is to generate 
+        random sequence lengths and sequence sizes of batch_size randomly according to 
+        intervals of interval values. The sequence length averaged by the interval 
+        number should be similar. At this time, calculate the cost after the average 
+        nterval is used to test whether the cost convergence.
+        TOTAL_BATCHES is a multiple of INTERVAL.
+        '''
+        if (batch_num) % INTERVAL==0 :
+            list_costs.append(costs/INTERVAL/BATCH_SIZE) #per sequence
+            list_losses.append(losses.data[0]/INTERVAL/BATCH_SIZE)
+            list_seq_num.append(lengthes) # per thousand
+            print ("Epoch %d, loss %f, cost %f" % (batch_num, list_losses[-1], list_costs[-1]) )
+            costs = 0
+            losses = 0
 
-    return list_losses,list_costs,list_batch_num,list_bits
+    return list_losses,list_costs,list_seq_num
 
-def evaluate(model, test_data_loader, criterion) : 
+def evaluate(model,criterion,optimizer, test_data_loader) : 
     costs = 0
     losses = 0
     lengthes = 0
-    optimizer = optim.RMSprop(model.parameters(), lr=3e-5, momentum = MOMENTUM)
+    # optimizer = optim.RMSprop(model.parameters(), lr=rmsprop_lr, momentum = MOMENTUM)
 
-    for i,(batch_num, X, Y, act) in enumerate(test_data_loader):
+    for batch_num, X, Y, act in test_data_loader:
         # start = time.time()
         if cuda_available:
             X, Y, act = X.cuda(), Y.cuda(), act.cuda()
@@ -230,8 +260,7 @@ def evaluate(model, test_data_loader, criterion) :
         loss.backward()
         optimizer.step()
 
-        length = Y.size(0) * BATCH_SIZE
-        lengthes += length
+        lengthes+=BATCH_SIZE
     
         losses += loss
         
@@ -242,7 +271,7 @@ def evaluate(model, test_data_loader, criterion) :
 
         costs += cost
         
-    print ("T = %d, Average loss %f, average cost %f" % (Y.size(0), losses.data/lengthes, costs/lengthes))
+    print ("T = %d, Average loss %f, average cost %f" % (Y.size(0), losses.data[0]/lengthes, costs/lengthes))
     return losses.data/lengthes, costs/lengthes
 
 def saveCheckpoint(model,list_batch_num,list_loss, list_cost, path='lstm') :
@@ -272,28 +301,29 @@ def loadCheckpoint(path='lstm'):
 Train LSTMcopy
 '''
 
-train_loader=dataloader(TOTAL_BATCHES, BATCH_SIZE,
-                    BYTE_WIDTH,2, SEQUENCE_MAX_LEN)
+train_loader=dataloader(TOTAL_BATCHES, BATCH_SIZE,\
+                    BYTE_WIDTH,SEQUENCE_MIN_LEN, SEQUENCE_MAX_LEN)
 
 model = LSTMcopy()
-list_loss,list_cost,list_batch_num,list_bits=train_model(model,train_loader)
+loss_function = nn.BCELoss()
+# criterion = loss_function  #nn.CrossEntropyLoss() nn.MSELoss() nn.BCELoss()
+# optimizer = optim.SGD(model.parameters(), lr=LR_0)
+# optimizer = optim.SGD(model.parameters(), lr=LR_0, momentum=MOMENTUM, weight_decay=WEIGHT_DECAY)
+# optimizer = optim.Adam(model.parameters(), lr=LR_0)
+optimizer = optim.RMSprop(model.parameters(), lr=rmsprop_lr, momentum = MOMENTUM)
+    
+print('Total params of Model LSTM :',model.calculate_num_params())
+list_loss,list_cost,list_seq_num=train_model(model,loss_function,optimizer,train_loader)
 
-saveCheckpoint(model,list_batch_num,list_loss, list_cost, path='lstm1') 
+saveCheckpoint(model,list_seq_num,list_loss, list_cost, path='lstm1') 
 
 #%%
-#plot accuracy as a function of epoch
-plt.figure()
-# plt.plot(range(0,total_batches),loss_list,label='LSTM')
-plt.plot(range(0,TOTAL_BATCHES),list_bits,label='Bits Num')
-# plt.plot(range(1,1000),valid_acc_list,label='Validation')
-plt.xlabel('Sequence number')
-plt.ylabel('Loss per sequence')
-plt.legend()
-# plt.savefig('lstm1.pdf')
-plt.show()
+
+model, list_seq_num, list_loss, list_cost = loadCheckpoint(path='lstm1')
 
 plt.figure()
-plt.plot(range(0,TOTAL_BATCHES),list_cost,label='LSTM')
+# plt.plot(range(0,TOTAL_BATCHES),list_cost,label='LSTM')
+plt.plot(list_seq_num,list_cost)
 # plt.plot(range(1,1000),valid_acc_list,label='Validation')
 plt.xlabel('Sequence number')
 plt.ylabel('Cost per sequence')
@@ -301,16 +331,24 @@ plt.legend()
 # plt.savefig('lstm1.pdf')
 plt.show()
 
-#%%
+#plot accuracy as a function of epoch
+# plt.figure()
+# # plt.plot(range(0,total_batches),loss_list,label='LSTM')
+# plt.plot(range(0,TOTAL_BATCHES),list_bits,label='Bits Num')
+# # plt.plot(range(1,1000),valid_acc_list,label='Validation')
+# plt.xlabel('Sequence number')
+# plt.ylabel('Loss per sequence')
+# plt.legend()
+# # plt.savefig('lstm1.pdf')
+# plt.show()
 
-model, list_seq_num, list_loss, list_cost = loadCheckpoint(path='lstm1')
 #%%
 list_avg_loss = []
 list_avg_cost = []
 for T in range(10,110,10) : 
     test_data_loader = dataloader(TOTAL_BATCHES, BATCH_SIZE,
                     BYTE_WIDTH,min_len=T,max_len=T)
-    avg_loss, avg_cost = evaluate(model,test_data_loader,loss_function)
+    avg_loss, avg_cost = evaluate(model,loss_function,optimizer,test_data_loader)
     list_avg_loss.append(avg_loss)
     list_avg_cost.append(avg_cost)
 
@@ -319,6 +357,7 @@ for T in range(10,110,10) :
 plt.plot(range(10,110,10),list_avg_cost)
 plt.xlabel('T')
 plt.ylabel('average cost')
+plt.savefig('lstm-cost-T.pdf')
 
 #%%
 test1=Variable(gen1seq())
