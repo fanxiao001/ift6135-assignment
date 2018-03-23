@@ -13,6 +13,7 @@ import torch.optim as optim
 import numpy as np
 import random
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 import os
 from aio import EncapsulatedNTM
 #%%
@@ -125,7 +126,7 @@ def evaluate(model, test_data_loader, criterion) :
 
         inp_seq_len, _, _ = X.size()
         outp_seq_len, batch_size, output_size = Y.size()
-        optimizer.zero_grad()
+        
         model.init_sequence(batch_size)
         
         # Feed the sequence + delimiter
@@ -154,6 +155,45 @@ def evaluate(model, test_data_loader, criterion) :
     print ("T = %d, Average loss %f, average cost %f" % (outp_seq_len, losses.data/lengthes, costs/lengthes))
     return losses.data/lengthes, costs/lengthes
 
+def evaluate_single_batch(net, criterion, X, Y):
+    """Evaluate a single batch (without training)."""
+    inp_seq_len = X.size(0)
+    outp_seq_len, batch_size, _ = Y.size()
+
+    # New sequence
+    net.init_sequence(batch_size)
+
+    # Feed the sequence + delimiter
+    states = []
+    for i in range(inp_seq_len):
+        o, state = net(X[i])
+        states += [state]
+
+    # Read the output (no input given)
+    y_out = Variable(torch.zeros(Y.size()))
+    for i in range(outp_seq_len):
+        y_out[i], state = net()
+        states += [state]
+
+    loss = criterion(y_out, Y)
+
+    y_out_binarized = y_out.clone().data
+    y_out_binarized.apply_(lambda x: 0 if x < 0.5 else 1)
+
+    # The cost is the number of error bits per sequence
+    cost = torch.sum(torch.abs(y_out_binarized - Y.data))
+
+    result = {
+        'loss': loss.data[0],
+        'cost': cost / batch_size,
+        'y_out': y_out,
+        'y_out_binarized': y_out_binarized,
+        'states': states
+    }
+
+    return result
+
+
 def saveCheckpoint(model,list_seq_num,list_loss, list_cost, path='lstm') :
     print('Saving..')
     state = {
@@ -175,55 +215,59 @@ def loadCheckpoint(path='lstm'):
     list_loss = checkpoint['list_loss']
     list_cost = checkpoint['list_cost']
     return model, list_seq_num, list_loss, list_cost
-#%%
-path = '/Users/fanxiao/Google Drive/UdeM/IFT6135 Representation Learning/homework3'    
-os.chdir(path)
 
-init_seed(10)
-NUM_BITS = 8
-LSTM_DIM = 256
-MIN_LENGTH = 1
-MAX_LENGTH = 20
-LEARNING_RATE = 1e-4
-MOMENTUM = 0.9 
-MINI_BATCH = 1
-EPOCH = 50000
-
-model = EncapsulatedNTM(num_inputs=NUM_BITS+1, num_outputs=NUM_BITS,
-                        controller_size=100, controller_layers=1, num_heads=1, N=128, M=20, controller_type ='mlp')
-
-#model = EncapsulatedNTM(num_inputs=NUM_BITS+1, num_outputs=NUM_BITS,
-#                        controller_size=100, controller_layers=1, num_heads=1, N=128, M=20, controller_type ='lstm')
-
-loss_function = nn.BCELoss()
-optimizer = optim.RMSprop(model.parameters(), lr=LEARNING_RATE, momentum = MOMENTUM)
-
-train_data_loader = dataloader(EPOCH,MINI_BATCH,NUM_BITS,MIN_LENGTH,MAX_LENGTH)
-
-#%%
-list_seq_num, list_loss, list_cost = train(model, train_data_loader, loss_function, optimizer, interval=500)
-
-#%%
-plt.plot(list_seq_num,list_cost)
-plt.xlabel('sequence number (thousands)')
-plt.ylabel('cost per sequence (bits)')
-#%%
-saveCheckpoint(model,list_seq_num,list_loss, list_cost, path='ntm_mlp_l1_b1_e50000_i500') 
-
-#%%
-#model, list_seq_num, list_loss, list_cost = loadCheckpoint(path='lstm3_l1_b100_e10000')
-model2, list_seq_num2, list_loss2, list_cost2 = loadCheckpoint(path='lstm3_l1_b20_e50000')
-
-#%%
-plt.plot(list_seq_num2,list_cost2, label='LSTM')
-plt.plot(list_seq_num,list_cost, label='NTM LSTM')
-plt.legend()
-
-#%%
-list_avg_loss = []
-list_avg_cost = []
-for T in range(10,110,10) : 
-    test_data_loader = dataloader(num_batches = 20,batch_size = MINI_BATCH,seq_width=8,min_len=T,max_len=T)
-    avg_loss, avg_cost = evaluate(model,test_data_loader,loss_function)
-    list_avg_loss.append(avg_loss)
-    list_avg_cost.append(avg_cost)
+def visualize_read_write(X,result,N) :
+    T, batch_size, num_bits = X.size()
+    T = T - 1
+    num_bits = num_bits - 1
+    
+    plt.figure(figsize=(8, 6)) 
+    gs = gridspec.GridSpec(2, 2, height_ratios=[1, 3]) 
+    
+    ax = plt.subplot(gs[0,0])
+    y_in = torch.cat((X[:,0,:].data,torch.zeros(T,num_bits+1)),dim=0)
+    ax.imshow(torch.t(y_in), cmap='gray',aspect='auto')
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+    ax.set_title('inputs')
+    
+    ax = plt.subplot(gs[0,1])
+    y_out = torch.cat((torch.zeros(T+1,num_bits),result['y_out_binarized'][:,0,:]),dim=0)
+    y_out = torch.cat((y_out,torch.zeros(2*T+1,1)),dim=1)
+    ax.imshow(torch.t(y_out), cmap='gray',aspect='auto')
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+    ax.set_title('outputs')
+    
+    states = result['states']
+    read_state = torch.zeros(len(states),N)  # read weight
+    write_state = torch.zeros(len(states),N) # write weight
+    for i in range(0,len(states)) :
+        reads, controller_state, heads_states = states[i]
+        read_state[i,:] = heads_states[0][0].data
+        write_state[i,:] = heads_states[1][0].data
+        
+        
+    ax = plt.subplot(gs[1,0])
+    ax.imshow(torch.t(write_state[:,90:]), cmap='gray',aspect='auto')
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+    #ax.text(1,40,'Time', fontsize=11)
+    ax.text(6,41,'Write Weightings',fontsize=12)
+    #ax.arrow(6,60,60, fc="k", ec="k", head_width=0.5, head_length=1, color='w')
+    #ax.annotate('Time', xy=(0.4, -0.1), xycoords='axes fraction', xytext=(0, -0.1),
+    #            arrowprops=dict(arrowstyle="->", color='black'))
+    #ax.annotate('Location', xy=(-0.2, 0.4), xycoords='axes fraction', xytext=(-0.26, 0), 
+    #            arrowprops=dict(arrowstyle="->", color='black'))
+    
+    
+    ax = plt.subplot(gs[1,1])
+    ax.imshow(torch.t(read_state[:,90:]), cmap='gray',aspect='auto')
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+    #ax.text(1,40,'Time', fontsize=11)
+    ax.text(6,41,'Read Weightings',fontsize=12)
+    
+    plt.tight_layout()
+    
+    plt.show()
