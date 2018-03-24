@@ -33,6 +33,7 @@ from torch.autograd import Variable
 import torch.autograd as autograd
 import torch.distributions as distributions
 
+from matplotlib import gridspec
 import matplotlib.pyplot as plt
 
 
@@ -302,12 +303,13 @@ def loadCheckpoint(path='ntm'):
 
 '''
 Train EncapsulatedNTM
+Use LSTM Controller
 '''
 
 model = EncapsulatedNTM(BYTE_WIDTH + 1, BYTE_WIDTH,
                               controller_size, controller_layers,
                               num_heads,
-                              memory_n, memory_m)
+                              memory_n, memory_m,controller_type ='lstm')
 
 train_loader=dataloader(TOTAL_BATCHES, BATCH_SIZE,
                     BYTE_WIDTH,
@@ -320,7 +322,7 @@ optimizer=optim.RMSprop(model.parameters(),
                              lr=rmsprop_lr)
 
 
-print('Total params of Model EncapsulatedNTM :',model.calculate_num_params())
+print('Total params of Model EncapsulatedNTM with LSTM controller :',model.calculate_num_params())
 list_loss,list_cost,list_seq_num=train_model(model,loss_function,optimizer,train_loader)
 
 saveCheckpoint(model,list_seq_num,list_loss, list_cost, path='ntm1') 
@@ -367,3 +369,160 @@ plt.savefig('ntm-cost-T.pdf')
 # model.forward(test1)
 # # model.init_hidden(1)
 # print(model.forward())
+
+#%%
+'''
+Use MLP Controller
+'''
+model = EncapsulatedNTM(BYTE_WIDTH + 1, BYTE_WIDTH,
+                              controller_size, controller_layers,
+                              num_heads,
+                              memory_n, memory_m,controller_type ='mlp')
+
+print('Total params of Model EncapsulatedNTM with MLP controller:',model.calculate_num_params())
+list_loss,list_cost,list_seq_num=train_model(model,loss_function,optimizer,train_loader)
+
+saveCheckpoint(model,list_seq_num,list_loss, list_cost, path='mlp-ntm1') 
+
+#%%
+model, list_seq_num, list_loss, list_cost = loadCheckpoint(path='mlp-ntm1')
+
+plt.figure()
+# plt.plot(range(0,TOTAL_BATCHES),list_cost,label='NTM')
+plt.plot(list_seq_num,list_cost)
+# plt.plot(range(1,1000),valid_acc_list,label='Validation')
+plt.xlabel('Sequence number')
+plt.ylabel('Cost per sequence')
+plt.legend()
+plt.savefig('mlp-NTM-xx.pdf')
+plt.show()
+
+#%%
+list_avg_loss = []
+list_avg_cost = []
+list_T_num = []
+for T in range(10,110,10) : 
+    test_data_loader = dataloader(TOTAL_BATCHES, BATCH_SIZE,
+                    BYTE_WIDTH,min_len=T,max_len=T)
+    avg_loss, avg_cost = evaluate(model,loss_function,optimizer,test_data_loader)
+    list_avg_loss.append(avg_loss)
+    list_avg_cost.append(avg_cost)
+    list_T_num.append(T)
+
+saveCheckpoint(model,list_T_num,list_avg_loss, list_avg_cost, path='mlp-ntm1-Ts') 
+
+#%%
+model, list_T_num, list_avg_loss, list_avg_cost = loadCheckpoint(path='mlp-ntm1-Ts')
+    
+plt.plot(list_T_num,list_avg_cost)
+plt.xlabel('T')
+plt.ylabel('average cost')
+plt.savefig('mlp-ntm-cost-T.pdf')
+
+#%%
+'''
+Visualize
+'''
+
+#%%
+model, list_seq_num, list_loss, list_cost = loadCheckpoint(path='ntm1')
+
+def evaluate_single_batch(net, criterion, X, Y):
+    """Evaluate a single batch (without training)."""
+    inp_seq_len = X.size(0)
+    outp_seq_len, batch_size, _ = Y.size()
+
+    # New sequence
+    net.init_sequence(batch_size)
+
+    # Feed the sequence + delimiter
+    states = []
+    for i in range(inp_seq_len):
+        o, state = net(X[i])
+        states += [state]
+
+    # Read the output (no input given)
+    y_out = Variable(torch.zeros(Y.size()))
+    for i in range(outp_seq_len):
+        y_out[i], state = net()
+        states += [state]
+
+    loss = criterion(y_out, Y)
+
+    y_out_binarized = y_out.clone().data
+    y_out_binarized.apply_(lambda x: 0 if x < 0.5 else 1)
+
+    # The cost is the number of error bits per sequence
+    cost = torch.sum(torch.abs(y_out_binarized - Y.data))
+
+    result = {
+        'loss': loss.data[0],
+        'cost': cost / batch_size,
+        'y_out': y_out,
+        'y_out_binarized': y_out_binarized,
+        'states': states
+    }
+
+    return result
+
+def visualize_read_write(X,result,N) :
+    T, batch_size, num_bits = X.size()
+    T = T - 1
+    num_bits = num_bits - 1
+    
+    plt.figure(figsize=(8, 6)) 
+    gs = gridspec.GridSpec(2, 2, height_ratios=[1, 3]) 
+    
+    ax = plt.subplot(gs[0,0])
+    y_in = torch.cat((X[:,0,:].data,torch.zeros(T,num_bits+1)),dim=0)
+    ax.imshow(torch.t(y_in), cmap='gray',aspect='auto')
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+    ax.set_title('inputs')
+    
+    ax = plt.subplot(gs[0,1])
+    y_out = torch.cat((torch.zeros(T+1,num_bits),result['y_out_binarized'][:,0,:]),dim=0)
+    y_out = torch.cat((y_out,torch.zeros(2*T+1,1)),dim=1)
+    ax.imshow(torch.t(y_out), cmap='gray',aspect='auto')
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+    ax.set_title('outputs')
+    
+    states = result['states']
+    read_state = torch.zeros(len(states),N)  # read weight
+    write_state = torch.zeros(len(states),N) # write weight
+    for i in range(0,len(states)) :
+        reads, controller_state, heads_states = states[i]
+        read_state[i,:] = heads_states[0][0].data
+        write_state[i,:] = heads_states[1][0].data
+        
+        
+    ax = plt.subplot(gs[1,0])
+    ax.imshow(torch.t(write_state[:,90:]), cmap='gray',aspect='auto')
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+    #ax.text(1,40,'Time', fontsize=11)
+    ax.text(6,41,'Write Weightings',fontsize=12)
+    #ax.arrow(6,60,60, fc="k", ec="k", head_width=0.5, head_length=1, color='w')
+    #ax.annotate('Time', xy=(0.4, -0.1), xycoords='axes fraction', xytext=(0, -0.1),
+    #            arrowprops=dict(arrowstyle="->", color='black'))
+    #ax.annotate('Location', xy=(-0.2, 0.4), xycoords='axes fraction', xytext=(-0.26, 0), 
+    #            arrowprops=dict(arrowstyle="->", color='black'))
+    
+    
+    ax = plt.subplot(gs[1,1])
+    ax.imshow(torch.t(read_state[:,90:]), cmap='gray',aspect='auto')
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+    #ax.text(1,40,'Time', fontsize=11)
+    ax.text(6,41,'Read Weightings',fontsize=12)
+    
+    plt.tight_layout()
+    
+    plt.show()
+
+for batch_num, X, Y, act in train_loader:
+    re=evaluate_single_batch(model,criterion,X,Y)
+    visualize_read_write(X,re,128)
+    
+    break
