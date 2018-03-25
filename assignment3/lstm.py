@@ -36,17 +36,16 @@ print(os.getcwd())
 
 #%%
 
-
 RANDOM_SEED = 2333
-REPORT_INTERVAL = 200
-CHECKPOINT_INTERVAL = 100 #1000
-CHECKPOINT_PATH='../checkpoint/'
+# REPORT_INTERVAL = 200
+# CHECKPOINT_INTERVAL = 100 #1000
+# CHECKPOINT_PATH='./checkpoint/'
 
-controller_size = 100 
-controller_layers = 1 
-num_heads = 1 
-memory_n = 128 
-memory_m = 20 
+# controller_size = 100 
+# controller_layers = 1 
+# num_heads = 1 
+# memory_n = 128 
+# memory_m = 20 
 
 rmsprop_lr = 3e-4 #paper=3e-5
 rmsprop_momentum = 0.9 
@@ -73,12 +72,12 @@ TOTAL_BATCHES is a multiple of INTERVAL.
 INTERVAL=100
 TOTAL_BATCHES = 20000
 #in each batch, there are batch_size sequences together as same length of sequence.
+BYTE_WIDTH = 8 
 BATCH_SIZE = 50
 SEQUENCE_MIN_LEN = 1 
 SEQUENCE_MAX_LEN = 20
-
-BYTE_WIDTH = 8 
 HIDDEN_NUM=100
+
 
 loss_function = nn.BCELoss()
 
@@ -94,6 +93,7 @@ cuda_available = torch.cuda.is_available()
 
 '''
 # Define the Model LSTM.
+# Augment hidden layer and hidden units, can augment the performance.
 '''
 class LSTMcopy(nn.Module):
     def __init__(self):
@@ -109,7 +109,7 @@ class LSTMcopy(nn.Module):
             self.hidden=self.hidden.cuda()
 
     def forward(self, sequence):
-        # out, (self.hidden, self.cell) = self.copy_machine(inputs, None)
+        # out, (self.hidden, self.cell) = self.lstm(inputs, None)
         out, self.hidden = self.lstm(sequence, self.hidden)
         out=self.mlp(out)
         return out
@@ -121,6 +121,10 @@ class LSTMcopy(nn.Module):
             num_params += p.data.view(-1).size(0)
         return num_params
 
+
+def get_ms():
+    """Returns the current time in miliseconds."""
+    return time.time() * 1000
 
 def gen1seq():
     length=np.random.randint(2,SEQUENCE_MAX_LEN+1)
@@ -158,6 +162,9 @@ def dataloader(total_batches,
     :param min_len: Sequence minimum length.
     :param max_len: Sequence maximum length.
 
+    return: batch_num,Xs(seq_len+1,Byte_size+1),Ys(seq_len,Byte_size),act_seqs(seq_len,Byte_size+1)
+    act_seqs is for the action of copy!
+    
     NOTE: The input width is `seq_width + 1`, the additional input
     contain the delimiter.
     """
@@ -192,7 +199,10 @@ def train_model(model,criterion,optimizer, seqs_loader, interval=500):
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150, 200], gamma=0.1)
 
     #training
-    print('Training Begining')
+    print('Training Begining, %d batches (batch_size=%d)...' % \
+                (TOTAL_BATCHES, BATCH_SIZE))
+    start_ms = get_ms()
+
     list_losses =[]
     list_costs =[]
     list_bits=[]
@@ -246,9 +256,12 @@ def train_model(model,criterion,optimizer, seqs_loader, interval=500):
             list_costs.append(costs/INTERVAL/BATCH_SIZE) #per sequence
             list_losses.append(losses.data[0]/INTERVAL/BATCH_SIZE)
             list_seq_num.append(lengthes) # per thousand
-            print ("Epoch %d, loss %f, cost %f" % (batch_num, list_losses[-1], list_costs[-1]) )
+            mean_time = ((get_ms() - start_ms) / INTERVAL) / BATCH_SIZE
+            print ("Batch %d th, loss %f, cost %f, Time %.3f ms/sequence." % (batch_num, list_losses[-1], list_costs[-1], mean_time) )
+            
             costs = 0
             losses = 0
+            start_ms = get_ms()
 
     return list_losses,list_costs,list_seq_num
 
