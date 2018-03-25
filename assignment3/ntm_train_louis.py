@@ -66,7 +66,7 @@ INTERVAL=100 #100
 TOTAL_BATCHES = 2000 #20000
 #in each batch, there are batch_size sequences together as same length of sequence.
 BYTE_WIDTH = 8 
-BATCH_SIZE = 5 #50
+BATCH_SIZE = 10 #50
 SEQUENCE_MIN_LEN = 1 #1
 SEQUENCE_MAX_LEN = 20 #20
 
@@ -299,6 +299,15 @@ def loadCheckpoint(path='ntm'):
     list_loss = checkpoint['list_loss']
     list_cost = checkpoint['list_cost']
     return model, list_batch_num, list_loss, list_cost
+
+
+train_loader=dataloader(TOTAL_BATCHES, BATCH_SIZE,
+                    BYTE_WIDTH,
+                    SEQUENCE_MIN_LEN, SEQUENCE_MAX_LEN)
+
+criterion=nn.BCELoss()
+
+
 #%%
 
 '''
@@ -311,17 +320,10 @@ model = EncapsulatedNTM(BYTE_WIDTH + 1, BYTE_WIDTH,
                               num_heads,
                               memory_n, memory_m,controller_type ='lstm')
 
-train_loader=dataloader(TOTAL_BATCHES, BATCH_SIZE,
-                    BYTE_WIDTH,
-                    SEQUENCE_MIN_LEN, SEQUENCE_MAX_LEN)
-
-criterion=nn.BCELoss()
 optimizer=optim.RMSprop(model.parameters(),
                              momentum=rmsprop_momentum,
                              alpha=rmsprop_alpha,
                              lr=rmsprop_lr)
-
-
 print('Total params of Model EncapsulatedNTM with LSTM controller :',model.calculate_num_params())
 list_loss,list_cost,list_seq_num=train_model(model,loss_function,optimizer,train_loader)
 
@@ -379,6 +381,10 @@ model = EncapsulatedNTM(BYTE_WIDTH + 1, BYTE_WIDTH,
                               num_heads,
                               memory_n, memory_m,controller_type ='mlp')
 
+optimizer=optim.RMSprop(model.parameters(),
+                             momentum=rmsprop_momentum,
+                             alpha=rmsprop_alpha,
+                             lr=rmsprop_lr)
 print('Total params of Model EncapsulatedNTM with MLP controller:',model.calculate_num_params())
 list_loss,list_cost,list_seq_num=train_model(model,loss_function,optimizer,train_loader)
 
@@ -474,16 +480,16 @@ def visualize_read_write(X,result,N) :
     gs = gridspec.GridSpec(2, 2, height_ratios=[1, 3]) 
     
     ax = plt.subplot(gs[0,0])
-    # y_in = torch.cat((X[:,0,:].data,torch.zeros(T,num_bits+1)),dim=0)
-    ax.imshow(torch.t(X[:-1,0,:-1].data), cmap='gray',aspect='auto')
+    y_in = torch.cat((X[:,0,:].data,torch.zeros(T,num_bits+1)),dim=0)
+    ax.imshow(torch.t(y_in), cmap='gray',aspect='auto')
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
     ax.set_title('inputs')
     
     ax = plt.subplot(gs[0,1])
-    # y_out = torch.cat((result['y_out_binarized'][:,0,:],torch.zeros(T+1,num_bits)),dim=0)
-    # y_out = torch.cat((y_out,torch.zeros(2*T+1,1)),dim=1)
-    ax.imshow(torch.t(result['y_out_binarized'][:,0,:]), cmap='gray',aspect='auto')
+    y_out = torch.cat((torch.zeros(T+1,num_bits),result['y_out_binarized'][:,0,:]),dim=0)
+    y_out = torch.cat((y_out,torch.zeros(2*T+1,1)),dim=1)
+    ax.imshow(torch.t(y_out), cmap='gray',aspect='auto')
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
     ax.set_title('outputs')
@@ -523,9 +529,10 @@ def visualize_read_write(X,result,N) :
 
 train_loader=dataloader(1, BATCH_SIZE,
                     BYTE_WIDTH,
-                    SEQUENCE_MAX_LEN+10, SEQUENCE_MAX_LEN+10)
+                    SEQUENCE_MAX_LEN, SEQUENCE_MAX_LEN)
 
 for batch_num, X, Y, act in train_loader:
     re=evaluate_single_batch(model,criterion,X,Y)
     visualize_read_write(X,re,memory_n)
+    
     break
