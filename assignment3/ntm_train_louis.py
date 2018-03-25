@@ -474,16 +474,16 @@ def visualize_read_write(X,result,N) :
     gs = gridspec.GridSpec(2, 2, height_ratios=[1, 3]) 
     
     ax = plt.subplot(gs[0,0])
-    y_in = torch.cat((X[:,0,:].data,torch.zeros(T,num_bits+1)),dim=0)
-    ax.imshow(torch.t(y_in), cmap='gray',aspect='auto')
+    # y_in = torch.cat((X[:,0,:].data,torch.zeros(T,num_bits+1)),dim=0)
+    ax.imshow(torch.t(X[:-1,0,:-1].data), cmap='gray',aspect='auto')
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
     ax.set_title('inputs')
     
     ax = plt.subplot(gs[0,1])
-    y_out = torch.cat((torch.zeros(T+1,num_bits),result['y_out_binarized'][:,0,:]),dim=0)
-    y_out = torch.cat((y_out,torch.zeros(2*T+1,1)),dim=1)
-    ax.imshow(torch.t(y_out), cmap='gray',aspect='auto')
+    # y_out = torch.cat((result['y_out_binarized'][:,0,:],torch.zeros(T+1,num_bits)),dim=0)
+    # y_out = torch.cat((y_out,torch.zeros(2*T+1,1)),dim=1)
+    ax.imshow(torch.t(result['y_out_binarized'][:,0,:]), cmap='gray',aspect='auto')
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
     ax.set_title('outputs')
@@ -518,11 +518,14 @@ def visualize_read_write(X,result,N) :
     ax.text(6,41,'Read Weightings',fontsize=12)
     
     plt.tight_layout()
-    
+    plt.savefig('visualization.pdf')
     plt.show()
+
+train_loader=dataloader(1, BATCH_SIZE,
+                    BYTE_WIDTH,
+                    SEQUENCE_MAX_LEN+10, SEQUENCE_MAX_LEN+10)
 
 for batch_num, X, Y, act in train_loader:
     re=evaluate_single_batch(model,criterion,X,Y)
-    visualize_read_write(X,re,128)
-    
+    visualize_read_write(X,re,memory_n)
     break
