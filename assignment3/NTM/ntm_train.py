@@ -269,5 +269,5 @@ def visualize_read_write(X,result,N) :
     ax.text(6,41,'Read Weightings',fontsize=12)
     
     plt.tight_layout()
-    
+    plt.savefig('visualize_head.pdf')
     plt.show()
