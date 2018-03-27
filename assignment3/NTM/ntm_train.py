@@ -8,7 +8,6 @@ Created on Wed Mar 21 15:01:49 2018
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 import random
@@ -227,16 +226,16 @@ def visualize_read_write(X,result,N) :
     ax = plt.subplot(gs[0,0])
     y_in = torch.cat((X[:,0,:].data,torch.zeros(T,num_bits+1)),dim=0)
     ax.imshow(torch.t(y_in), cmap='gray',aspect='auto')
-    ax.get_xaxis().set_visible(False)
-    ax.get_yaxis().set_visible(False)
+    ax.set_xticks([])
+    ax.set_yticks([])
     ax.set_title('inputs')
     
     ax = plt.subplot(gs[0,1])
     y_out = torch.cat((torch.zeros(T+1,num_bits),result['y_out_binarized'][:,0,:]),dim=0)
     y_out = torch.cat((y_out,torch.zeros(2*T+1,1)),dim=1)
     ax.imshow(torch.t(y_out), cmap='gray',aspect='auto')
-    ax.get_xaxis().set_visible(False)
-    ax.get_yaxis().set_visible(False)
+    ax.set_xticks([])
+    ax.set_yticks([])
     ax.set_title('outputs')
     
     states = result['states']
@@ -250,24 +249,22 @@ def visualize_read_write(X,result,N) :
         
     ax = plt.subplot(gs[1,0])
     ax.imshow(torch.t(write_state[:,90:]), cmap='gray',aspect='auto')
-    ax.get_xaxis().set_visible(False)
-    ax.get_yaxis().set_visible(False)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_ylabel('location ------------------->')
+    ax.set_xlabel('time ------------------->')
     #ax.text(1,40,'Time', fontsize=11)
-    ax.text(6,41,'Write Weightings',fontsize=12)
-    #ax.arrow(6,60,60, fc="k", ec="k", head_width=0.5, head_length=1, color='w')
-    #ax.annotate('Time', xy=(0.4, -0.1), xycoords='axes fraction', xytext=(0, -0.1),
-    #            arrowprops=dict(arrowstyle="->", color='black'))
-    #ax.annotate('Location', xy=(-0.2, 0.4), xycoords='axes fraction', xytext=(-0.26, 0), 
-    #            arrowprops=dict(arrowstyle="->", color='black'))
+    ax.text(6,42,'Write Weightings',fontsize=12)
     
     
     ax = plt.subplot(gs[1,1])
     ax.imshow(torch.t(read_state[:,90:]), cmap='gray',aspect='auto')
-    ax.get_xaxis().set_visible(False)
-    ax.get_yaxis().set_visible(False)
-    #ax.text(1,40,'Time', fontsize=11)
-    ax.text(6,41,'Read Weightings',fontsize=12)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel('time ------------------->')
+    ax.text(6,42,'Read Weightings',fontsize=12)
     
     plt.tight_layout()
-    plt.savefig('visualize_head.pdf')
+    plt.savefig('visualize_head.pdf',bbox_inches = "tight")
     plt.show()
+
