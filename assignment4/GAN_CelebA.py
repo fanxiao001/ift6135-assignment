@@ -1,12 +1,14 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Apr  2 20:36:51 2018
+Created on Fri Apr  6 19:26:06 2018
 
 @author: fanxiao
 """
-
 import os
+path = 'C:/Users/lingyu.yue/Documents/Xiao_Fan/GAN'
+os.chdir(path)
+
+
 import time
 import matplotlib.pyplot as plt
 from scipy.misc import imresize
@@ -22,11 +24,14 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from PIL import Image
 import itertools
+from inception_score import inception_score
+from inception_score import inception_score2
 #%%
 
 # root path depends on your computer
-root = '/Users/fanxiao/datasets/img_align_celeba/'
-save_root = '/Users/fanxiao/datasets/resized_celebA/'
+root = 'C:/Users/lingyu.yue/Documents/Xiao_Fan/GAN/img_align_celeba/img_align_celeba/'
+save_root = 'C:/Users/lingyu.yue/Documents/Xiao_Fan/GAN/img_align_celeba/resized_celebA/' 
+
 resize_size = 64
 
 if not os.path.isdir(save_root):
@@ -141,6 +146,7 @@ def train(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, 
         train_hist['D_losses'].append(torch.mean(torch.FloatTensor(D_losses)))
         train_hist['G_losses'].append(torch.mean(torch.FloatTensor(G_losses)))
         train_hist['per_epoch_ptimes'].append(per_epoch_ptime)
+        print(inception_score(G,D,100,128,splits=10))
     
     end_time = time.time()
     total_ptime = end_time - start_time
@@ -148,28 +154,36 @@ def train(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, 
     
     print("Avg per epoch ptime: %.2f, total %d epochs ptime: %.2f" % (torch.mean(torch.FloatTensor(train_hist['per_epoch_ptimes'])), num_epochs, total_ptime))
     print("Training finish!")
-    return generator, discriminator, train_hist
+    return  train_hist
 
-def saveCheckpoint(generator,discriminator,train_hist, path='GAN') :
+def saveCheckpoint(generator,discriminator,train_hist, path='GAN', use_cuda=True) :
     print('Saving..')
     state = {
-        'generator': generator,
-        'discriminator': discriminator,
+        'generator':  generator.cpu().state_dict()if use_cuda else generator.state_dict(),
+        'discriminator': discriminator.cpu().state_dict() if use_cuda else discriminator.state_dict(),
         'train_hist' : train_hist
     }
     if not os.path.isdir('checkpoint'):
         os.mkdir('checkpoint')
     torch.save(state, './checkpoint/'+path)
 
-def loadCheckpoint(path='GAN'):
+def loadCheckpoint(path='GAN', hidden_size = 100, use_cuda=True):
+    dtype = torch.FloatTensor
     print('==> Resuming from checkpoint..')
     assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
     checkpoint = torch.load('./checkpoint/'+path)
-    generator = checkpoint['generator']
-    discriminator = checkpoint['discriminator']
+    generator_params = checkpoint['generator']
+    discriminator_params = checkpoint['discriminator']
+    G = generator(128,hidden_size)
+    G.load_state_dict(generator_params)
+    D = discriminator(128)
+    D.load_state_dict(discriminator_params)
+    if use_cuda :
+        G.cuda()
+        D.cuda()
     train_hist = checkpoint['train_hist']
 
-    return generator,discriminator,train_hist
+    return G,D,train_hist
 
 def test(epoch, model, test_loader, loss_function):
     model.eval()
@@ -206,6 +220,8 @@ class generator(nn.Module):
         self.deconv4 = nn.ConvTranspose2d(d*2, d, 4, 2, 1) #16->32
         self.deconv4_bn = nn.BatchNorm2d(d)
         self.deconv5 = nn.ConvTranspose2d(d, 3, 4, 2, 1) #32->64
+        
+        self.hidden_size = hidden_size
 
     # weight_init
     def weight_init(self, mean, std):
@@ -328,8 +344,12 @@ def normal_init(m, mean, std):
         m.bias.data.zero_()
         
 #%%
-def show_result(num_epoch, show = False, save = False, path = 'result.png'):
-    z_ = Variable(torch.randn((5*5, 100)).view(-1, 100, 1, 1))
+def show_result(G,D,num_epoch, hidden_size = 100, show = False, save = False, path = 'result.png'):
+    z_ = torch.randn((5*5, hidden_size)).view(-1, hidden_size, 1, 1)
+    if use_cuda : 
+        z_ = Variable(z_.cuda())
+    else : 
+        z_ = Variable(z_)
 #    z_ = Variable(z_.cuda(), volatile=True)
 
     G.eval()
@@ -358,11 +378,19 @@ def show_result(num_epoch, show = False, save = False, path = 'result.png'):
         plt.close()
     
 #%%
-path = '/Users/fanxiao/Google Drive/UdeM/IFT6135 Representation Learning/homework4'
+#path = '/Users/fanxiao/Google Drive/UdeM/IFT6135 Representation Learning/homework4'
+path = 'C:/Users/lingyu.yue/Documents/Xiao_Fan/GAN'
 os.chdir(path)
-img_root = '/Users/fanxiao/datasets/resized_celebA/'
+#img_root = '/Users/fanxiao/datasets/resized_celebA/'
+img_root = 'C:/Users/lingyu.yue/Documents/Xiao_Fan/GAN/img_align_celeba/resized_celebA/'
 IMAGE_RESIZE = 64
-train_sampler = range(2000)
+train_sampler = range(4000)
+
+batch_size = 128
+lr = 0.0002
+train_epoch = 20
+hidden_dim = 100
+use_cuda = torch.cuda.is_available()
 
 data_transform = transforms.Compose([
         transforms.ToTensor(),
@@ -378,12 +406,8 @@ dataset = datasets.ImageFolder(root=img_root, transform=data_transform)
 #G = generator(128)
 #G = generator_Upsampling_Nearest(128)
 # network
-batch_size = 128
-lr = 0.0002
-train_epoch = 10
-hidden_dim = 50
 
-use_cuda = torch.cuda.is_available()
+
 G = generator(128,hidden_dim)
 D = discriminator(128)
 G.weight_init(mean=0.0, std=0.02)
@@ -403,16 +427,25 @@ G_optimizer = optim.Adam(G.parameters(), lr=lr, betas=(0.5, 0.999))
 D_optimizer = optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
 #model = VAE()
 
-
-generator,discriminator,train_hist = train(G,D,G_optimizer,D_optimizer,train_data_loader,BCE_loss,train_epoch,hidden_dim)
-
-#%%
-saveCheckpoint(generator,discriminator,train_hist,'GANvanilla')
+imgs = torch.randn(10000,hidden_dim,1,1)
+train_hist = train(G,D,G_optimizer,D_optimizer,train_data_loader,BCE_loss,train_epoch,hidden_dim)
 
 #%%
-generator,discriminator,train_hist = loadCheckpoint('GANvanilla')
+saveCheckpoint(G,D,train_hist,'GANvanilla_t2000_h100_ep1',use_cuda)
+
 #%%
-show_result(train_epoch, show=True,save=True, path='figures/result.pdf')
+G,D,train_hist = loadCheckpoint('GANvanilla_t2000_h100_ep15',hidden_dim,use_cuda=True)
+#%%
+show_result(G,D,train_epoch, hidden_dim, show=True,save=True, path='figures/result.pdf')
+
+#%%
+
+inception_score2(G,D,100,128,splits=10)
+
+#from inception_score import inception_score
+#for ep in range(100) :
+#    imgs = torch.randn(100,hidden_dim,1,1)    
+#imgs = G(Variable(imgs.cuda()))
 
 #%%
 x = dataset[0][0]
