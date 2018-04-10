@@ -63,7 +63,7 @@ def inception_score2(generator, discriminator, num_batch, batch_size=128, cuda=T
 
 
 # exp(E_x[KL(p(y|x) || p(y))])
-def inception_score(imgs, discriminator, batch_size=128, cuda=True, resize=False, splits=1):
+def inception_score(imgs, generator, discriminator, batch_size=128, cuda=True, resize=False, splits=1):
     """Computes the inception score of the generated images imgs
     cuda -- whether or not to run on GPU
 
@@ -85,15 +85,11 @@ def inception_score(imgs, discriminator, batch_size=128, cuda=True, resize=False
     preds = torch.zeros((N_img,2))
     
     for ep, batch in enumerate(dataloader, 0):
-#    for ep in range(num_batch) :
-#        z_ = torch.randn((batch_size, hidden_size)).view(-1, hidden_size, 1, 1)
-#        z_ = Variable(z_.type(dtype))
-#        G_result = generator(z_) #generate fake images (batch,3,64,64)
-        # Load predition model
+
         discriminator.eval();
-        print(batch.size())
         batch = batch.type(dtype)
-        G_result = Variable(batch)
+    
+        G_result = generator(Variable(batch))
         
         preds[ep*batch_size:(ep+1)*batch_size,0] =  discriminator(G_result).squeeze().data # (batch,1,1,1)
         preds[ep*batch_size:(ep+1)*batch_size,1] =  1.0 - discriminator(G_result).squeeze().data # (batch,1,1,1)
