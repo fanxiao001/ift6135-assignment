@@ -7,15 +7,6 @@ Created on Fri Apr  6 19:26:06 2018
 
 #%%
 import os
-# path = 'C:/Users/lingyu.yue/Documents/Xiao_Fan/GAN'
-path="/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/assignment4/"
-if os.path.isdir(path):
-    os.chdir(path)
-else:
-    os.chdir("./")
-print(os.getcwd())
-
-#%%
 import time
 import matplotlib.pyplot as plt
 from scipy.misc import imresize
@@ -31,6 +22,16 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from PIL import Image
 import itertools
+
+# path = 'C:/Users/lingyu.yue/Documents/Xiao_Fan/GAN'
+path="/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/assignment4/"
+if os.path.isdir(path):
+    os.chdir(path)
+else:
+    os.chdir("./")
+print(os.getcwd())
+
+#%%
 from inception_score import inception_score
 from inception_score import inception_score2
 
@@ -71,7 +72,7 @@ for i in range(len(img_list)):
 '''
 #%%
 
-def train(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun, num_epochs, hidden_size=100, critic=1, score=True) :
+def train(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun, num_epochs, hidden_size=100, critic=1, score=True,savepath='GAN') :
 
     train_hist = {}
     train_hist['D_losses'] = []
@@ -193,6 +194,12 @@ def train(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, 
             print("Inception score: ",score)
             train_hist['Inc_score'].append(score)
     
+        if (epoch+1) % 3==0:
+            end_time = time.time()
+            total_ptime = end_time - start_time
+            train_hist['total_ptime'].append(total_ptime)
+            saveCheckpoint(generator,discriminator,train_hist,savepath+'_ep'+str(epoch+1),use_cuda)
+        
     end_time = time.time()
     total_ptime = end_time - start_time
     train_hist['total_ptime'].append(total_ptime)
@@ -201,7 +208,7 @@ def train(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, 
     print("Training finish!")
     return  train_hist
 
-def train2(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun, num_epochs, hidden_size=100, critic_max=10, score=True) :
+def train2(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun, num_epochs, hidden_size=100, critic_max=10, score=True,savepath='GAN') :
 
     train_hist = {}
     train_hist['D_losses'] = []
@@ -332,6 +339,13 @@ def train2(generator, discriminator, G_optimizer, D_optimizer,train_data_loader,
             score=inception_score(test_z, generator, discriminator, batch_size=128, cuda=use_cuda, resize=False, splits=10)
             print("Inception score: ",score)
             train_hist['Inc_score'].append(score)
+
+        if (epoch+1) % 3==0:
+            end_time = time.time()
+            total_ptime = end_time - start_time
+            train_hist['total_ptime'].append(total_ptime)
+            saveCheckpoint(generator,discriminator,train_hist,savepath+'_ep'+str(epoch+1),use_cuda)
+        
     
     end_time = time.time()
     total_ptime = end_time - start_time
@@ -477,7 +491,7 @@ def train3(generator, discriminator, G_optimizer, D_optimizer,train_data_loader,
             print("Inception score: ",score)
             train_hist['Inc_score'].append(score)
         
-        if (epoch+1) % 5==0:
+        if (epoch+1) % 3==0:
             end_time = time.time()
             total_ptime = end_time - start_time
             train_hist['total_ptime'].append(total_ptime)
@@ -492,7 +506,7 @@ def train3(generator, discriminator, G_optimizer, D_optimizer,train_data_loader,
     print("Training finish!")
     return  train_hist
 
-def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun, num_epochs, hidden_size=100, critic_max=15, score=True,savepath='GAN') :
+def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun='NLLLoss', num_epochs=10, hidden_size=100, critic_max=15, score=True,savepath='GAN') :
 
     train_hist = {}
     train_hist['D_losses'] = []
@@ -508,11 +522,9 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
         test_z = torch.randn(10000,generator.hidden_size,1,1)
 
     critic_max=1
-    ini_threshold=0.8 #0.8->0.3, -log0.5=0.693
+    # ini_threshold=0.8 #0.8->0.3, -log0.5=0.693
         
     for epoch in range(num_epochs):
-        D_losses = []
-        G_losses = []
     
         # learning rate decay
         if (epoch+1) == 11:
@@ -525,18 +537,20 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
             D_optimizer.param_groups[0]['lr'] /= 10
             print("learning rate change!")
             
-        threshold=ini_threshold-epoch*(ini_threshold-0.3)/num_epochs
+        # threshold=ini_threshold-epoch*(ini_threshold-0.3)/num_epochs
     
         num_iter = 0
     
+        D_losses = 0
+        G_losses = 0
         epoch_start_time = time.time()
         for x_, _ in train_data_loader:
             
             #For stability, update discriminator several times before updating generator
             mini_batch = x_.size()[0]
     
-            y_real_ = torch.ones(mini_batch)
-            y_fake_ = torch.zeros(mini_batch)-1
+            y_real_ = torch.FloatTensor([1])
+            y_fake_ = y_real_ * -1
             
             if use_cuda :
                 x_, y_real_, y_fake_ = Variable(x_.cuda()), Variable(y_real_.cuda()), Variable(y_fake_.cuda())
@@ -552,7 +566,7 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
                 discriminator.zero_grad()
         
 
-                D_result_r = discriminator(x_).squeeze() #(batch,100,1,1) => (batch,100)
+                D_result_r = discriminator(x_) #(batch,100,1,1) => (batch,100)
                 # D_real_loss = Loss_fun(D_result, y_real_) #-log(D(x)) BEC_loss = -(ylogx+(1-y)log(1-x))
                 # D_real_loss.backward()
                 D_result_r.backward(y_real_)
@@ -564,7 +578,7 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
                     z_ = Variable(z_)
                 G_result = generator(z_)
         
-                D_result_f = discriminator(G_result).squeeze()
+                D_result_f = discriminator(G_result)
                 # D_fake_loss = Loss_fun(D_result, y_fake_) #-log(1-D(G(z)))
                 # D_fake_loss.backward()
                 D_result_f.backward(y_fake_)
@@ -586,7 +600,7 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
 
                 # if (D_real_loss.data[0]+D_fake_loss.data[0])/2<threshold: break  
     
-            D_losses.append(D_loss_sum/n)
+            D_losses+=D_loss_sum/n
             str_critic=str(n)
     
             # train generator G : maximize E[log(D(G(z)))], minimize -[]
@@ -603,7 +617,7 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
                     z_ = Variable(z_)
         
                 G_result = generator(z_)
-                D_result = discriminator(G_result).squeeze()
+                D_result = discriminator(G_result)
                 # G_train_loss = Loss_fun(D_result, y_real_) #-log(1-D(G(z)))
                 # G_train_loss.backward()
                 D_result.backward(y_real_)
@@ -613,7 +627,7 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
 
                 # if G_train_loss.data[0]<threshold: break  
     
-            G_losses.append(G_loss_sum/n)
+            G_losses+=G_loss_sum/n
             str_critic=str_critic+':'+str(n)
     
             num_iter += 1
@@ -622,14 +636,15 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
         per_epoch_ptime = epoch_end_time - epoch_start_time
     
     
-        print('[%d/%d], loss_D %.3f, loss_G %.3f - critic %s, ptime %.2fs' % ((epoch + 1), num_epochs, torch.mean(torch.FloatTensor(D_losses)),
-                                                                  torch.mean(torch.FloatTensor(G_losses)), str_critic, per_epoch_ptime))
+        print('[%d/%d], loss_D %.3f, loss_G %.3f - critic %s, ptime %.2fs' % \
+                ((epoch + 1), num_epochs, D_losses/num_iter,
+                G_losses/num_iter, str_critic, per_epoch_ptime))
 #        p = 'CelebA_DCGAN_results/Random_results/CelebA_DCGAN_' + str(epoch + 1) + '.png'
 #        fixed_p = 'CelebA_DCGAN_results/Fixed_results/CelebA_DCGAN_' + str(epoch + 1) + '.png'
 #        show_result((epoch+1), save=True, path=p, isFix=False)
 #        show_result((epoch+1), save=True, path=fixed_p, isFix=True)
-        train_hist['D_losses'].append(torch.mean(torch.FloatTensor(D_losses)))
-        train_hist['G_losses'].append(torch.mean(torch.FloatTensor(G_losses)))
+        train_hist['D_losses'].append(D_losses/num_iter)
+        train_hist['G_losses'].append(G_losses/num_iter)
         train_hist['per_epoch_ptimes'].append(per_epoch_ptime)
         
         # if score :
@@ -638,7 +653,7 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
         #     print("Inception score: ",score)
         #     train_hist['Inc_score'].append(score)
         
-        if (epoch+1) % 5==0:
+        if (epoch+1) % 3==0:
             end_time = time.time()
             total_ptime = end_time - start_time
             train_hist['total_ptime'].append(total_ptime)
@@ -663,6 +678,9 @@ def saveCheckpoint(generator,discriminator,train_hist, path='GAN', use_cuda=True
     if not os.path.isdir('checkpoint'):
         os.mkdir('checkpoint')
     torch.save(state, './checkpoint/'+path)
+    if use_cuda:
+        generator.cuda()
+        discriminator.cuda()
 
 def loadCheckpoint(path='GAN', hidden_size = 100, use_cuda=True):
     dtype = torch.FloatTensor
@@ -695,6 +713,24 @@ def loadCheckpoint_Upsampling(path='GAN', hidden_size = 100, use_cuda=True,mode=
         G=generator_Upsampling(128, hidden_size,'bilinear')
     G.load_state_dict(generator_params)
     D = discriminator(128)
+    D.load_state_dict(discriminator_params)
+    if use_cuda :
+        G.cuda()
+        D.cuda()
+    train_hist = checkpoint['train_hist']
+
+    return G,D,train_hist
+
+def loadCheckpoint_W(path='GAN', hidden_size = 100, use_cuda=True):
+    dtype = torch.FloatTensor
+    print('==> Resuming from checkpoint..')
+    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load('./checkpoint/'+path)
+    generator_params = checkpoint['generator']
+    discriminator_params = checkpoint['discriminator']
+    G = generator(128,hidden_size)
+    G.load_state_dict(generator_params)
+    D = discriminator_W(128)
     D.load_state_dict(discriminator_params)
     if use_cuda :
         G.cuda()
@@ -858,8 +894,9 @@ class discriminator_W(nn.Module):
         x = F.leaky_relu(self.conv3_bn(self.conv3(x)), 0.2)
         x = F.leaky_relu(self.conv4_bn(self.conv4(x)), 0.2)
         x = self.conv5(x) #output (batch,1,1,1)
+        x = x.mean(0)
 
-        return x
+        return x.view(1)
 
 
 def normal_init(m, mean, std):

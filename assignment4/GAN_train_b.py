@@ -5,7 +5,7 @@
 # GAN_train_b.py
 # @author Zhibin.LU
 # @created Tue Apr 17 2018 11:18:27 GMT-0400 (EDT)
-# @last-modified Wed Apr 18 2018 09:53:45 GMT-0400 (EDT)
+# @last-modified Wed Apr 18 2018 17:14:51 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -30,8 +30,6 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from PIL import Image
 import itertools
-from inception_score import inception_score
-from inception_score import inception_score2
 # path = 'C:/Users/lingyu.yue/Documents/Xiao_Fan/GAN'
 path="/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/assignment4/"
 if os.path.isdir(path):
@@ -41,6 +39,8 @@ else:
 print(os.getcwd())
 
 import GAN_CelebA
+from inception_score import inception_score
+from inception_score import inception_score2
 #from GAN_train import loadCheckpoint,generator,generator_Upsampling,discriminator,show_result
 importlib.reload(GAN_CelebA)
 
@@ -55,13 +55,14 @@ importlib.reload(GAN_CelebA)
 img_root = "img_align_celeba/resized_celebA/"
 IMAGE_RESIZE = 64
 
-train_sampler = range(8000) #2000,4000, 150000
+sample_num=10000
+train_sampler = range(sample_num) #2000,4000, 150000
 
 batch_size = 128
-lr = 0.0008 #0.001, 0.0002
-train_epoch = 50
+lr = 0.001 #0.001, 0.0002
+train_epoch = 30
 hidden_dim = 100
-critic_max=12
+critic_max=10
 
 use_cuda = torch.cuda.is_available()
 torch.manual_seed(999)
@@ -111,7 +112,7 @@ if use_cuda :
 G_optimizer = optim.Adam(G.parameters(), lr=lr, betas=(0.5, 0.999))
 D_optimizer = optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
 
-train_hist = GAN_CelebA.train3(G,D,G_optimizer,D_optimizer,train_data_loader,\
-        BCE_loss,train_epoch,hidden_dim,critic_max=critic_max,savepath='GANBilinear_t8000_h100')
-GAN_CelebA.saveCheckpoint(G,D,train_hist,'GANBilinear_t8000_h100_ep50.train3',use_cuda)
+train_hist = GAN_CelebA.train2(G,D,G_optimizer,D_optimizer,train_data_loader,\
+        BCE_loss,train_epoch,hidden_dim,critic_max=critic_max,savepath='GANBilinear_t'+str(sample_num)+'_h'+str(hidden_dim)+'_train2')
+GAN_CelebA.saveCheckpoint(G,D,train_hist,'GANBilinear_t'+str(sample_num)+'_h'+str(hidden_dim)+'_ep30.train2',use_cuda)
 

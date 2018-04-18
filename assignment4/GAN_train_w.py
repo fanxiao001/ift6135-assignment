@@ -5,7 +5,7 @@
 # GAN_WGAN_train.py
 # @author Zhibin.LU
 # @created Wed Apr 18 2018 10:52:03 GMT-0400 (EDT)
-# @last-modified Wed Apr 18 2018 13:09:15 GMT-0400 (EDT)
+# @last-modified Wed Apr 18 2018 17:05:56 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -14,19 +14,6 @@
 #%%
 import os
 import importlib
-
-# path = 'C:/Users/lingyu.yue/Documents/Xiao_Fan/GAN'
-path="/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/assignment4/"
-if os.path.isdir(path):
-    os.chdir(path)
-else:
-    os.chdir("./")
-print(os.getcwd())
-
-import GAN_CelebA
-#from GAN_train import loadCheckpoint,generator,generator_Upsampling,discriminator,show_result
-importlib.reload(GAN_CelebA)
-
 
 import time
 import matplotlib.pyplot as plt
@@ -43,8 +30,22 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from PIL import Image
 import itertools
+
+# path = 'C:/Users/lingyu.yue/Documents/Xiao_Fan/GAN'
+path="/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/assignment4/"
+if os.path.isdir(path):
+    os.chdir(path)
+else:
+    os.chdir("./")
+print(os.getcwd())
+
+import GAN_CelebA
 from inception_score import inception_score
 from inception_score import inception_score2
+#from GAN_train import loadCheckpoint,generator,generator_Upsampling,discriminator,show_result
+importlib.reload(GAN_CelebA)
+
+
 
 #%%
 
@@ -56,13 +57,14 @@ from inception_score import inception_score2
 # img_root = 'C:/Users/lingyu.yue/Documents/Xiao_Fan/GAN/img_align_celeba/resized_celebA/'
 img_root = "img_align_celeba/resized_celebA/"
 IMAGE_RESIZE = 64
-train_sampler = range(4000) #2000,4000, 150000
+sample_num=10000
+train_sampler = range(sample_num) #2000,4000, 150000
 
 batch_size = 128
 lr = 0.00005 #0.00005 0.001, 0.0002
-train_epoch = 50
+train_epoch = 30
 hidden_dim = 100
-critic_max=12
+critic_max=1
 
 use_cuda = torch.cuda.is_available()
 torch.manual_seed(999)
@@ -119,5 +121,6 @@ G_optimizer = optim.RMSprop(G.parameters(), lr=lr)
 D_optimizer = optim.RMSprop(D.parameters(), lr=lr)
 
 train_hist = GAN_CelebA.train_W(G,D,G_optimizer,D_optimizer,train_data_loader,\
-        None,train_epoch,hidden_dim,critic_max=critic_max,savepath='GAN_W_t4000_h100')
-GAN_CelebA.saveCheckpoint(G,D,train_hist,'GAN_W_t4000_h100_ep50.train3',use_cuda)
+        Loss_fun=None,num_epochs=train_epoch,hidden_size=hidden_dim,critic_max=critic_max,\
+        score=False,savepath='GAN_W_t'+str(sample_num)+'_h'+str(hidden_dim)+'_trainw')
+GAN_CelebA.saveCheckpoint(G,D,train_hist,'GAN_W_t'+str(sample_num)+'_h'+str(hidden_dim)+'_ep30.trainw',use_cuda)
