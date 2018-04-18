@@ -492,6 +492,167 @@ def train3(generator, discriminator, G_optimizer, D_optimizer,train_data_loader,
     print("Training finish!")
     return  train_hist
 
+def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun, num_epochs, hidden_size=100, critic_max=15, score=True,savepath='GAN') :
+
+    train_hist = {}
+    train_hist['D_losses'] = []
+    train_hist['G_losses'] = []
+    train_hist['per_epoch_ptimes'] = []
+    train_hist['Inc_score'] = []
+    train_hist['total_ptime'] = []
+    
+    print('Training start!')
+    start_time = time.time()
+    
+    if score : 
+        test_z = torch.randn(10000,generator.hidden_size,1,1)
+
+    critic_max=1
+    ini_threshold=0.8 #0.8->0.3, -log0.5=0.693
+        
+    for epoch in range(num_epochs):
+        D_losses = []
+        G_losses = []
+    
+        # learning rate decay
+        if (epoch+1) == 11:
+            G_optimizer.param_groups[0]['lr'] /= 10
+            D_optimizer.param_groups[0]['lr'] /= 10
+            print("learning rate change!")
+    
+        if (epoch+1) == 16:
+            G_optimizer.param_groups[0]['lr'] /= 10
+            D_optimizer.param_groups[0]['lr'] /= 10
+            print("learning rate change!")
+            
+        threshold=ini_threshold-epoch*(ini_threshold-0.3)/num_epochs
+    
+        num_iter = 0
+    
+        epoch_start_time = time.time()
+        for x_, _ in train_data_loader:
+            
+            #For stability, update discriminator several times before updating generator
+            mini_batch = x_.size()[0]
+    
+            y_real_ = torch.ones(mini_batch)
+            y_fake_ = torch.zeros(mini_batch)-1
+            
+            if use_cuda :
+                x_, y_real_, y_fake_ = Variable(x_.cuda()), Variable(y_real_.cuda()), Variable(y_fake_.cuda())
+            else :
+                x_, y_real_, y_fake_ = Variable(x_), Variable(y_real_), Variable(y_fake_)
+            
+            # generator.eval()
+            # discriminator.train()
+            D_loss_sum = 0
+            for n in range(1,critic_max+1) :
+                
+                # train discriminator D : maximize E[log(D(x))]+E[log(1-D(G(z)))], minimize -[]
+                discriminator.zero_grad()
+        
+
+                D_result_r = discriminator(x_).squeeze() #(batch,100,1,1) => (batch,100)
+                # D_real_loss = Loss_fun(D_result, y_real_) #-log(D(x)) BEC_loss = -(ylogx+(1-y)log(1-x))
+                # D_real_loss.backward()
+                D_result_r.backward(y_real_)
+
+                z_ = torch.randn((mini_batch, hidden_size)).view(-1, hidden_size, 1, 1)
+                if use_cuda : 
+                    z_ = Variable(z_.cuda())
+                else :
+                    z_ = Variable(z_)
+                G_result = generator(z_)
+        
+                D_result_f = discriminator(G_result).squeeze()
+                # D_fake_loss = Loss_fun(D_result, y_fake_) #-log(1-D(G(z)))
+                # D_fake_loss.backward()
+                D_result_f.backward(y_fake_)
+
+                D_optimizer.step()
+                
+                # clamp parameters to a cube
+                #p.grad.data.clamp_(-10, 10)
+                for p in discriminator.parameters():
+                    p.data.clamp_(-0.01, 0.01)
+
+                # D_train_loss = D_real_loss + D_fake_loss
+                # D_train_loss.backward()
+                # D_optimizer.step()
+                # D_train_loss_sum += D_train_loss.data[0]
+
+                # D_loss_sum += (D_real_loss.data[0]+D_fake_loss.data[0])/2
+                D_loss_sum +=D_result_r.data[0]-D_result_f.data[0]
+
+                # if (D_real_loss.data[0]+D_fake_loss.data[0])/2<threshold: break  
+    
+            D_losses.append(D_loss_sum/n)
+            str_critic=str(n)
+    
+            # train generator G : maximize E[log(D(G(z)))], minimize -[]
+            # discriminator.eval()
+            # generator.train()
+            G_loss_sum=0
+            for n in range(1,critic_max+1) :
+                generator.zero_grad()
+        
+                z_ = torch.randn((mini_batch, hidden_size)).view(-1, hidden_size, 1, 1)
+                if use_cuda : 
+                    z_ = Variable(z_.cuda())
+                else :
+                    z_ = Variable(z_)
+        
+                G_result = generator(z_)
+                D_result = discriminator(G_result).squeeze()
+                # G_train_loss = Loss_fun(D_result, y_real_) #-log(1-D(G(z)))
+                # G_train_loss.backward()
+                D_result.backward(y_real_)
+                G_optimizer.step()
+
+                G_loss_sum += D_result.data[0]
+
+                # if G_train_loss.data[0]<threshold: break  
+    
+            G_losses.append(G_loss_sum/n)
+            str_critic=str_critic+':'+str(n)
+    
+            num_iter += 1
+    
+        epoch_end_time = time.time()
+        per_epoch_ptime = epoch_end_time - epoch_start_time
+    
+    
+        print('[%d/%d], loss_D %.3f, loss_G %.3f - critic %s, ptime %.2fs' % ((epoch + 1), num_epochs, torch.mean(torch.FloatTensor(D_losses)),
+                                                                  torch.mean(torch.FloatTensor(G_losses)), str_critic, per_epoch_ptime))
+#        p = 'CelebA_DCGAN_results/Random_results/CelebA_DCGAN_' + str(epoch + 1) + '.png'
+#        fixed_p = 'CelebA_DCGAN_results/Fixed_results/CelebA_DCGAN_' + str(epoch + 1) + '.png'
+#        show_result((epoch+1), save=True, path=p, isFix=False)
+#        show_result((epoch+1), save=True, path=fixed_p, isFix=True)
+        train_hist['D_losses'].append(torch.mean(torch.FloatTensor(D_losses)))
+        train_hist['G_losses'].append(torch.mean(torch.FloatTensor(G_losses)))
+        train_hist['per_epoch_ptimes'].append(per_epoch_ptime)
+        
+        # if score :
+        #     # score=inception_score(test_z,G,D,128,cuda=use_cuda,splits=10)
+        #     score=inception_score(test_z, generator, discriminator, batch_size=128, cuda=use_cuda, resize=False, splits=10)
+        #     print("Inception score: ",score)
+        #     train_hist['Inc_score'].append(score)
+        
+        if (epoch+1) % 5==0:
+            end_time = time.time()
+            total_ptime = end_time - start_time
+            train_hist['total_ptime'].append(total_ptime)
+            saveCheckpoint(generator,discriminator,train_hist,savepath+'_ep'+str(epoch+1),use_cuda)
+        
+    
+    end_time = time.time()
+    total_ptime = end_time - start_time
+    train_hist['total_ptime'].append(total_ptime)
+    
+    print("Avg per epoch ptime: %.2fs, total %d epochs ptime: %.2fs" % (torch.mean(torch.FloatTensor(train_hist['per_epoch_ptimes'])), num_epochs, total_ptime))
+    print("Training finish!")
+    return  train_hist
+
 def saveCheckpoint(generator,discriminator,train_hist, path='GAN', use_cuda=True) :
     print('Saving..')
     state = {
@@ -668,6 +829,38 @@ class discriminator(nn.Module):
         x = F.sigmoid(self.conv5(x)) #output (batch,1,1,1)
 
         return x
+
+
+# discriminator of Wasserstein
+class discriminator_W(nn.Module):
+    # initializers
+    def __init__(self, d=128):
+        super(discriminator_W, self).__init__()
+        # in_channels, out_channels, kernel_size, stride, padding
+        self.conv1 = nn.Conv2d(3, d, 4, 2, 1) # (64-4+2)/2+1 = 32
+        self.conv2 = nn.Conv2d(d, d*2, 4, 2, 1) # (32-4+2)/2+1= 16
+        self.conv2_bn = nn.BatchNorm2d(d*2)
+        self.conv3 = nn.Conv2d(d*2, d*4, 4, 2, 1) #(16-4+2)/2+1=8
+        self.conv3_bn = nn.BatchNorm2d(d*4)
+        self.conv4 = nn.Conv2d(d*4, d*8, 4, 2, 1) #(8-4+2)/2+1=4
+        self.conv4_bn = nn.BatchNorm2d(d*8)
+        self.conv5 = nn.Conv2d(d*8, 1, 4, 1, 0) #(4-4)/1+1=1 =>(batch,1,1,1)
+
+    # weight_init
+    def weight_init(self, mean, std):
+        for m in self._modules:
+            normal_init(self._modules[m], mean, std)
+
+    # forward method
+    def forward(self, input): #input (batch,3,64,64)
+        x = F.leaky_relu(self.conv1(input), 0.2)
+        x = F.leaky_relu(self.conv2_bn(self.conv2(x)), 0.2)
+        x = F.leaky_relu(self.conv3_bn(self.conv3(x)), 0.2)
+        x = F.leaky_relu(self.conv4_bn(self.conv4(x)), 0.2)
+        x = self.conv5(x) #output (batch,1,1,1)
+
+        return x
+
 
 def normal_init(m, mean, std):
     if isinstance(m, nn.ConvTranspose2d) or isinstance(m, nn.Conv2d):
