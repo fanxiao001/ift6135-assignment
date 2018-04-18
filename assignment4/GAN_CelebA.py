@@ -370,7 +370,7 @@ def train3(generator, discriminator, G_optimizer, D_optimizer,train_data_loader,
     if score : 
         test_z = torch.randn(10000,generator.hidden_size,1,1)
 
-    ini_threshold=0.8 #0.8->0.3, -log0.5=0.693
+    # ini_threshold=0.8 #0.8->0.3, -log0.5=0.693
         
     for epoch in range(num_epochs):
         D_losses = []
@@ -387,7 +387,7 @@ def train3(generator, discriminator, G_optimizer, D_optimizer,train_data_loader,
             D_optimizer.param_groups[0]['lr'] /= 10
             print("learning rate change!")
             
-        threshold=ini_threshold-epoch*(ini_threshold-0.3)/num_epochs
+        # threshold=ini_threshold-epoch*(ini_threshold-0.3)/num_epochs
     
         num_iter = 0
     
@@ -438,7 +438,8 @@ def train3(generator, discriminator, G_optimizer, D_optimizer,train_data_loader,
 
                 D_loss_sum += (D_real_loss.data[0]+D_fake_loss.data[0])/2
 
-                if (D_real_loss.data[0]+D_fake_loss.data[0])/2<threshold: break  
+                # if (D_real_loss.data[0]+D_fake_loss.data[0])/2<threshold: break  
+                if len(G_losses)>0 and G_losses[-1]>(D_real_loss.data[0]+D_fake_loss.data[0])/2: break
     
             D_losses.append(D_loss_sum/n)
             str_critic=str(n)
@@ -464,7 +465,8 @@ def train3(generator, discriminator, G_optimizer, D_optimizer,train_data_loader,
 
                 G_loss_sum += G_train_loss.data[0]
 
-                if G_train_loss.data[0]<threshold: break  
+                # if G_train_loss.data[0]<threshold: break  
+                if D_losses[-1]>G_train_loss.data[0]: break
     
             G_losses.append(G_loss_sum/n)
             str_critic=str_critic+':'+str(n)
@@ -595,7 +597,9 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
                 # D_optimizer.step()
                 # D_train_loss_sum += D_train_loss.data[0]
 
-                # D_loss_sum += (D_real_loss.data[0]+D_fake_loss.data[0])/2
+                '''
+                Wasserstein distance
+                '''
                 D_loss_sum +=D_result_r.data[0]-D_result_f.data[0]
 
                 # if (D_real_loss.data[0]+D_fake_loss.data[0])/2<threshold: break  

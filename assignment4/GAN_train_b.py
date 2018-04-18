@@ -5,7 +5,7 @@
 # GAN_train_b.py
 # @author Zhibin.LU
 # @created Tue Apr 17 2018 11:18:27 GMT-0400 (EDT)
-# @last-modified Wed Apr 18 2018 17:14:51 GMT-0400 (EDT)
+# @last-modified Wed Apr 18 2018 18:56:50 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -59,8 +59,9 @@ sample_num=10000
 train_sampler = range(sample_num) #2000,4000, 150000
 
 batch_size = 128
-lr = 0.001 #0.001, 0.0002
-train_epoch = 30
+lr_d = 0.001 #0.001, 0.0002
+lr_g = 0.0009 #0.001, 0.0002
+train_epoch = 50
 hidden_dim = 100
 critic_max=10
 
@@ -109,10 +110,10 @@ if use_cuda :
     G.cuda()
     D.cuda()
 # Adam optimizer
-G_optimizer = optim.Adam(G.parameters(), lr=lr, betas=(0.5, 0.999))
-D_optimizer = optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
+G_optimizer = optim.Adam(G.parameters(), lr=lr_g, betas=(0.5, 0.999))
+D_optimizer = optim.Adam(D.parameters(), lr=lr_d, betas=(0.5, 0.999))
 
-train_hist = GAN_CelebA.train2(G,D,G_optimizer,D_optimizer,train_data_loader,\
-        BCE_loss,train_epoch,hidden_dim,critic_max=critic_max,savepath='GANBilinear_t'+str(sample_num)+'_h'+str(hidden_dim)+'_train2')
-GAN_CelebA.saveCheckpoint(G,D,train_hist,'GANBilinear_t'+str(sample_num)+'_h'+str(hidden_dim)+'_ep30.train2',use_cuda)
+train_hist = GAN_CelebA.train3(G,D,G_optimizer,D_optimizer,train_data_loader,\
+        BCE_loss,train_epoch,hidden_dim,critic_max=critic_max,savepath='GANBilinear_t'+str(sample_num)+'_h'+str(hidden_dim)+'_train3')
+GAN_CelebA.saveCheckpoint(G,D,train_hist,'GANBilinear_t'+str(sample_num)+'_h'+str(hidden_dim)+'_ep50.train3',use_cuda)
 
