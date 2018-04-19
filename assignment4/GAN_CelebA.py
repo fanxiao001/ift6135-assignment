@@ -72,7 +72,7 @@ for i in range(len(img_list)):
 '''
 #%%
 
-def train(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun, num_epochs, hidden_size=100, critic=1, score=True,savepath='GAN') :
+def train(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun, num_epochs, hidden_size=100, critic=1, score=False,savepath='GAN') :
 
     train_hist = {}
     train_hist['D_losses'] = []
@@ -190,7 +190,7 @@ def train(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, 
         
         if score :
             # score=inception_score(test_z,G,D,128,cuda=use_cuda,splits=10)
-            score=inception_score(test_z, generator, discriminator, batch_size=128, cuda=use_cuda, resize=False, splits=10)
+            score=inception_score(test_z, generator, batch_size=128, cuda=use_cuda, resize=True, splits=10)
             print("Inception score: ",score)
             train_hist['Inc_score'].append(score)
     
@@ -208,7 +208,7 @@ def train(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, 
     print("Training finish!")
     return  train_hist
 
-def train2(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun, num_epochs, hidden_size=100, critic_max=10, score=True,savepath='GAN') :
+def train2(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun, num_epochs, hidden_size=100, critic_max=10, score=False,savepath='GAN') :
 
     train_hist = {}
     train_hist['D_losses'] = []
@@ -336,7 +336,7 @@ def train2(generator, discriminator, G_optimizer, D_optimizer,train_data_loader,
         
         if score :
             # score=inception_score(test_z,G,D,128,cuda=use_cuda,splits=10)
-            score=inception_score(test_z, generator, discriminator, batch_size=128, cuda=use_cuda, resize=False, splits=10)
+            score=inception_score(test_z, generator, batch_size=128, cuda=use_cuda, resize=True, splits=10)
             print("Inception score: ",score)
             train_hist['Inc_score'].append(score)
 
@@ -355,7 +355,7 @@ def train2(generator, discriminator, G_optimizer, D_optimizer,train_data_loader,
     print("Training finish!")
     return  train_hist
 
-def train3(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun, num_epochs, hidden_size=100, critic_max=15, score=True,savepath='GAN') :
+def train3(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun, num_epochs, hidden_size=100, critic_max=15, score=False,savepath='GAN') :
 
     train_hist = {}
     train_hist['D_losses'] = []
@@ -489,7 +489,7 @@ def train3(generator, discriminator, G_optimizer, D_optimizer,train_data_loader,
         
         if score :
             # score=inception_score(test_z,G,D,128,cuda=use_cuda,splits=10)
-            score=inception_score(test_z, generator, discriminator, batch_size=128, cuda=use_cuda, resize=False, splits=10)
+            score=inception_score(test_z, generator, batch_size=128, cuda=use_cuda, resize=True, splits=10)
             print("Inception score: ",score)
             train_hist['Inc_score'].append(score)
         
@@ -508,7 +508,7 @@ def train3(generator, discriminator, G_optimizer, D_optimizer,train_data_loader,
     print("Training finish!")
     return  train_hist
 
-def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun='NLLLoss', num_epochs=10, hidden_size=100, critic_max=15, score=True,savepath='GAN') :
+def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader, Loss_fun='NLLLoss', num_epochs=10, hidden_size=100, critic_max=15, score=False,savepath='GAN') :
 
     train_hist = {}
     train_hist['D_losses'] = []
@@ -529,15 +529,15 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
     for epoch in range(num_epochs):
     
         # learning rate decay
-        if (epoch+1) == 11:
-            G_optimizer.param_groups[0]['lr'] /= 10
-            D_optimizer.param_groups[0]['lr'] /= 10
-            print("learning rate change!")
+        # if (epoch+1) == 11:
+        #     G_optimizer.param_groups[0]['lr'] /= 10
+        #     D_optimizer.param_groups[0]['lr'] /= 10
+        #     print("learning rate change!")
     
-        if (epoch+1) == 16:
-            G_optimizer.param_groups[0]['lr'] /= 10
-            D_optimizer.param_groups[0]['lr'] /= 10
-            print("learning rate change!")
+        # if (epoch+1) == 16:
+        #     G_optimizer.param_groups[0]['lr'] /= 10
+        #     D_optimizer.param_groups[0]['lr'] /= 10
+        #     print("learning rate change!")
             
         # threshold=ini_threshold-epoch*(ini_threshold-0.3)/num_epochs
     
@@ -593,6 +593,7 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
 
                 '''
                 Wasserstein distance
+                mean(f(x)) - mean(f(z))
                 '''
                 D_loss_sum +=np.abs(D_result_r.data[0]-D_result_f.data[0])
 
@@ -639,7 +640,7 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
         
         # if score :
         #     # score=inception_score(test_z,G,D,128,cuda=use_cuda,splits=10)
-        #     score=inception_score(test_z, generator, discriminator, batch_size=128, cuda=use_cuda, resize=False, splits=10)
+        #     score=inception_score(test_z, generator, discriminator, batch_size=128, cuda=use_cuda, resize=True, splits=10)
         #     print("Inception score: ",score)
         #     train_hist['Inc_score'].append(score)
         
@@ -999,12 +1000,12 @@ if __name__ == '__main__':
     dataset = datasets.ImageFolder(root=img_root, transform=data_transform)
 
     #%%
-    G,D,train_hist = GAN_train.loadCheckpoint('GANDeconvolution_t4000_h100_ep20',hidden_dim,use_cuda=use_cuda)
+    G,D,train_hist = loadCheckpoint('GANDeconvolution_t4000_h100_ep20',hidden_dim,use_cuda=use_cuda)
 
-    GAN_train.show_result(G,D,train_epoch, hidden_dim, show=True,save=True, path='figures/result_Deconvolution.pdf', use_cuda=use_cuda)
+    show_result(G,D,train_epoch, hidden_dim, show=True,save=True, path='figures/result_Deconvolution.pdf', use_cuda=use_cuda)
 
     test_z = torch.randn(10000,100,1,1)
-    inception_score(test_z, G, D, batch_size=128, cuda=use_cuda, resize=False, splits=10)
+    inception_score(test_z, G, batch_size=128, cuda=use_cuda, resize=True, splits=10)
     
 
     #from inception_score import inception_score

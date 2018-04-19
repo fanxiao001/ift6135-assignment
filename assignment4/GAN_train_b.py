@@ -5,7 +5,7 @@
 # GAN_train_b.py
 # @author Zhibin.LU
 # @created Tue Apr 17 2018 11:18:27 GMT-0400 (EDT)
-# @last-modified Thu Apr 19 2018 09:12:59 GMT-0400 (EDT)
+# @last-modified Thu Apr 19 2018 14:48:19 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -55,12 +55,12 @@ importlib.reload(GAN_CelebA)
 img_root = "img_align_celeba/resized_celebA/"
 IMAGE_RESIZE = 64
 
-sample_num=9000
+sample_num=9900
 train_sampler = range(sample_num) #2000,4000, 150000
 
 batch_size = 128
-lr_d = 0.001 #0.001, 0.0002
-lr_g = 0.0009 #0.001, 0.0002
+lr_d = 0.0002 #0.001, 0.0002
+lr_g = 0.0002 #0.001, 0.0002
 train_epoch = 50
 hidden_dim = 100
 critic_max=15

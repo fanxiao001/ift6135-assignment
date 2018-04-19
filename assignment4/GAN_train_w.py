@@ -5,7 +5,7 @@
 # GAN_WGAN_train.py
 # @author Zhibin.LU
 # @created Wed Apr 18 2018 10:52:03 GMT-0400 (EDT)
-# @last-modified Thu Apr 19 2018 09:01:48 GMT-0400 (EDT)
+# @last-modified Thu Apr 19 2018 12:41:27 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -106,5 +106,5 @@ D_optimizer = optim.RMSprop(D.parameters(), lr=lr)
 
 train_hist = GAN_CelebA.train_W(G,D,G_optimizer,D_optimizer,train_data_loader,\
         Loss_fun=None,num_epochs=train_epoch,hidden_size=hidden_dim,critic_max=critic_max,\
-        score=False,savepath='GAN_W_t'+str(sample_num)+'_h'+str(hidden_dim)+'_trainw')
+        score=False,savepath='GAN_W_fixlr_t'+str(sample_num)+'_h'+str(hidden_dim)+'_trainw')
 GAN_CelebA.saveCheckpoint(G,D,train_hist,'GAN_W_t'+str(sample_num)+'_h'+str(hidden_dim)+'_ep50.trainw',use_cuda)
