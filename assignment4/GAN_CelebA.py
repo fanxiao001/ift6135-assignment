@@ -567,7 +567,6 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
                 # train discriminator D : maximize E[log(D(x))]+E[log(1-D(G(z)))], minimize -[]
                 discriminator.zero_grad()
         
-
                 #mean(f(x))
                 D_result_r = discriminator(x_) #(batch,100,1,1) => (batch,100)
                 
@@ -929,6 +928,51 @@ def show_result(G,D,num_epoch, hidden_size = 100, show = False, save = False, pa
     else:
         plt.close()
 
+def compareRandomPoint(x_0,x_1,G, hidden_size = 100, show = False, save = False, path = 'result.png',use_cuda=True):
+
+    z_0 = torch.randn(hidden_size)
+    z_1 = torch.randn(hidden_size)
+    z_prime=torch.zeros(11,hidden_size)
+    for n in range(0,11):
+        z_prime[n]=n*0.1*z_0+(1-n*0.1)*z_1
+    z_prime=z_prime.view(-1, hidden_size, 1, 1)
+
+    if use_cuda : 
+        z_prime = Variable(z_prime.cuda())
+    else : 
+        z_prime = Variable(z_prime)
+
+    x_prime=torch.zeros(11,3,64,64)
+    for n in range(0,11):
+        x_prime[n]=n*0.1*x_0+(1-n*0.1)*x_1
+    # x_prime=x_prime.view().view(-1, hidden_size, 1, 1)
+
+
+    G.eval()
+    test_images = G(z_prime)
+    G.train()
+
+    fig, ax = plt.subplots(2, 11, figsize=(10, 2))
+    for i, j in itertools.product(range(2), range(11)):
+        ax[i, j].get_xaxis().set_visible(False)
+        ax[i, j].get_yaxis().set_visible(False)
+
+    for k in range(11):
+        ax[0, k].cla()
+        ax[0, k].imshow((x_prime[k].numpy().transpose(1, 2, 0) + 1) / 2)
+
+    for k in range(11):
+        ax[1, k].cla()
+        ax[1, k].imshow((test_images[k].cpu().data.numpy().transpose(1, 2, 0) + 1) / 2)
+
+    label = '2 random point linear.'
+    fig.text(0.5, 0.04, label, ha='center')
+    plt.savefig(path)
+
+    if show:
+        plt.show()
+    else:
+        plt.close()
 
 #%%
 
