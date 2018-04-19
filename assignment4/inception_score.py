@@ -16,7 +16,7 @@ from torchvision.models.inception import inception_v3
 import numpy as np
 from scipy.stats import entropy
 
-def inception_score2(generator, discriminator, num_batch, batch_size=128, cuda=True, resize=False, splits=1):
+def inception_score2(generator, num_batch, batch_size=32, cuda=True, resize=False, splits=1):
     """Computes the inception score of the generated images imgs
     cuda -- whether or not to run on GPU
 
@@ -34,19 +34,27 @@ def inception_score2(generator, discriminator, num_batch, batch_size=128, cuda=T
             print("WARNING: You have a CUDA device, so you should probably set cuda=True")
         dtype = torch.FloatTensor
 
-#    hidden_size = generator.hidden_size
-    preds = torch.zeros((N_img,2))
+    # Load inception model
+    inception_model = inception_v3(pretrained=True, transform_input=False).type(dtype)
+    inception_model.eval();
+    up = nn.Upsample(size=(299, 299), mode='bilinear').type(dtype)
+    
+    # Get predictions
+    preds = np.zeros((N_img, 1000))
+    
+    def get_pred(x):
+        if resize:
+            x = up(x)
+        x = inception_model(x)
+        return F.softmax(x).data.cpu().numpy()
     
     for ep in range(num_batch) :
         z_ = torch.randn((batch_size, hidden_size)).view(-1, hidden_size, 1, 1)
         z_ = Variable(z_.type(dtype))
         G_result = generator(z_) #generate fake images (batch,3,64,64)
-        # Load predition model
-        discriminator.eval();
         
-        preds[ep*batch_size:(ep+1)*batch_size,0] =  discriminator(G_result).squeeze().data # (batch,1,1,1)
-        preds[ep*batch_size:(ep+1)*batch_size,1] =  1.0 - discriminator(G_result).squeeze().data # (batch,1,1,1)
-    preds = preds.numpy()
+        preds[ep*batch_size:(ep+1)*batch_size] =  get_pred(G_result)
+        
     # Now compute the mean kl-div
     split_scores = []
 
@@ -62,16 +70,16 @@ def inception_score2(generator, discriminator, num_batch, batch_size=128, cuda=T
     return np.mean(split_scores), np.std(split_scores)
 
 
-# exp(E_x[KL(p(y|x) || p(y))])
-def inception_score(imgs, generator, discriminator, batch_size=128, cuda=True, resize=False, splits=1):
+
+def inception_score(z_, generator, batch_size=32, cuda=True, resize=False, splits=1):
     """Computes the inception score of the generated images imgs
     cuda -- whether or not to run on GPU
 
     splits -- number of splits
     
     """
-    N_img = len(imgs)
-    dataloader = torch.utils.data.DataLoader(imgs, batch_size=batch_size)
+    N_img = len(z_)
+    dataloader = torch.utils.data.DataLoader(z_, batch_size=batch_size)
     
     # Set up dtype
     if cuda:
@@ -81,19 +89,26 @@ def inception_score(imgs, generator, discriminator, batch_size=128, cuda=True, r
             print("WARNING: You have a CUDA device, so you should probably set cuda=True")
         dtype = torch.FloatTensor
 
-#    hidden_size = generator.hidden_size
-    preds = torch.zeros((N_img,2))
+    # Load inception model
+    inception_model = inception_v3(pretrained=True, transform_input=False).type(dtype)
+    inception_model.eval();
+    up = nn.Upsample(size=(299, 299), mode='bilinear').type(dtype)
+    
+    # Get predictions
+    preds = np.zeros((N_img, 1000))
+    
+    def get_pred(x):
+        if resize:
+            x = up(x)
+        x = inception_model(x)
+        return F.softmax(x).data.cpu().numpy()
     
     for ep, batch in enumerate(dataloader, 0):
 
-        discriminator.eval();
         batch = batch.type(dtype)
-    
         G_result = generator(Variable(batch))
+        preds[ep*batch_size:(ep+1)*batch_size] =  get_pred(G_result)
         
-        preds[ep*batch_size:(ep+1)*batch_size,0] =  discriminator(G_result).squeeze().data # (batch,1,1,1)
-        preds[ep*batch_size:(ep+1)*batch_size,1] =  1.0 - discriminator(G_result).squeeze().data # (batch,1,1,1)
-    preds = preds.numpy()
     # Now compute the mean kl-div
     split_scores = []
 
