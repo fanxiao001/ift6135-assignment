@@ -928,10 +928,12 @@ def show_result(G,D,num_epoch, hidden_size = 100, show = False, save = False, pa
     else:
         plt.close()
 
-def compareRandomPoint(x_0,x_1,G, hidden_size = 100, show = False, save = False, path = 'result.png',use_cuda=True):
+def compareRandomPoint(x_0,x_1,G,chooseRandn, hidden_size = 100, show = False, save = False, path = 'result.png',use_cuda=True,label='model'):
 
-    z_0 = torch.randn(hidden_size)
-    z_1 = torch.randn(hidden_size)
+    for i in range(chooseRandn):
+        z_0 = torch.randn(hidden_size)
+        z_1 = torch.randn(hidden_size)
+
     z_prime=torch.zeros(11,hidden_size)
     for n in range(0,11):
         z_prime[n]=n*0.1*z_0+(1-n*0.1)*z_1
@@ -965,7 +967,6 @@ def compareRandomPoint(x_0,x_1,G, hidden_size = 100, show = False, save = False,
         ax[1, k].cla()
         ax[1, k].imshow((test_images[k].cpu().data.numpy().transpose(1, 2, 0) + 1) / 2)
 
-    label = '2 random point linear.'
     fig.text(0.5, 0.04, label, ha='center')
     plt.savefig(path)
 
