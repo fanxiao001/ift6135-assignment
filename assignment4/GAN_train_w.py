@@ -5,7 +5,7 @@
 # GAN_WGAN_train.py
 # @author Zhibin.LU
 # @created Wed Apr 18 2018 10:52:03 GMT-0400 (EDT)
-# @last-modified Wed Apr 18 2018 18:04:07 GMT-0400 (EDT)
+# @last-modified Thu Apr 19 2018 09:01:48 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -87,27 +87,11 @@ train_data_loader = torch.utils.data.DataLoader(
 
 # Binary Cross Entropy loss
 # NLL_loss = nn.NLLLoss()
-#model = VAE()
 
 '''
 Deconvolution (transposed convolution) with paddings and strides
 '''
 
-# G = GAN_CelebA.generator(128,hidden_dim)
-# D = GAN_CelebA.discriminator(128)
-# G.weight_init(mean=0.0, std=0.02)
-# D.weight_init(mean=0.0, std=0.02)
-# if use_cuda : 
-#     G.cuda()
-#     D.cuda()
-# # Adam optimizer
-# G_optimizer = optim.Adam(G.parameters(), lr=lr, betas=(0.5, 0.999))
-# D_optimizer = optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
-
-# train_hist = GAN_CelebA.train(G,D,G_optimizer,D_optimizer,train_data_loader,BCE_loss,train_epoch,hidden_dim,critic=1)
-# GAN_CelebA.saveCheckpoint(G,D,train_hist,'GANDeconvolution_t4000_h100_ep20.c1',use_cuda)
-
-# Dynamic critic of grandiant descent between Distriminator and Generator.
 importlib.reload(GAN_CelebA)
 G = GAN_CelebA.generator(128,hidden_dim)
 D = GAN_CelebA.discriminator_W(128)

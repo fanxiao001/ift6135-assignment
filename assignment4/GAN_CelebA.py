@@ -551,13 +551,13 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
             #For stability, update discriminator several times before updating generator
             mini_batch = x_.size()[0]
     
-            y_real_ = torch.FloatTensor([1])
-            y_fake_ = y_real_ * -1
+            one = torch.FloatTensor([1])
+            mone = one * -1
             
             if use_cuda :
-                x_, y_real_, y_fake_ = Variable(x_.cuda()), Variable(y_real_.cuda()), Variable(y_fake_.cuda())
+                x_, one, mone = Variable(x_.cuda()), Variable(one.cuda()), Variable(mone.cuda())
             else :
-                x_, y_real_, y_fake_ = Variable(x_), Variable(y_real_), Variable(y_fake_)
+                x_, one, mone = Variable(x_), Variable(one), Variable(mone)
             
             # generator.eval()
             # discriminator.train()
@@ -568,10 +568,11 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
                 discriminator.zero_grad()
         
 
+                #mean(f(x))
                 D_result_r = discriminator(x_) #(batch,100,1,1) => (batch,100)
-                # D_real_loss = Loss_fun(D_result, y_real_) #-log(D(x)) BEC_loss = -(ylogx+(1-y)log(1-x))
-                # D_real_loss.backward()
-                D_result_r.backward(y_real_)
+                
+                #grandiant mean(f(x))
+                D_result_r.backward(one)
 
                 z_ = torch.randn((mini_batch, hidden_size)).view(-1, hidden_size, 1, 1)
                 if use_cuda : 
@@ -579,37 +580,28 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
                 else :
                     z_ = Variable(z_)
                 G_result = generator(z_)
-        
+
+                #mean(f(z))
                 D_result_f = discriminator(G_result)
-                # D_fake_loss = Loss_fun(D_result, y_fake_) #-log(1-D(G(z)))
-                # D_fake_loss.backward()
-                D_result_f.backward(y_fake_)
+                
+                #grandiant -mean(f(z))
+                D_result_f.backward(mone)
 
                 D_optimizer.step()
                 
-                # clamp parameters to a cube
-                #p.grad.data.clamp_(-10, 10)
                 for p in discriminator.parameters():
                     p.data.clamp_(-0.01, 0.01)
-
-                # D_train_loss = D_real_loss + D_fake_loss
-                # D_train_loss.backward()
-                # D_optimizer.step()
-                # D_train_loss_sum += D_train_loss.data[0]
 
                 '''
                 Wasserstein distance
                 '''
-                D_loss_sum +=D_result_r.data[0]-D_result_f.data[0]
+                D_loss_sum +=np.abs(D_result_r.data[0]-D_result_f.data[0])
 
                 # if (D_real_loss.data[0]+D_fake_loss.data[0])/2<threshold: break  
     
             D_losses+=D_loss_sum/n
             str_critic=str(n)
     
-            # train generator G : maximize E[log(D(G(z)))], minimize -[]
-            # discriminator.eval()
-            # generator.train()
             G_loss_sum=0
             for n in range(1,critic_max+1) :
                 generator.zero_grad()
@@ -622,9 +614,8 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
         
                 G_result = generator(z_)
                 D_result = discriminator(G_result)
-                # G_train_loss = Loss_fun(D_result, y_real_) #-log(1-D(G(z)))
-                # G_train_loss.backward()
-                D_result.backward(y_real_)
+                
+                D_result.backward(one)
                 G_optimizer.step()
 
                 G_loss_sum += D_result.data[0]
@@ -643,10 +634,6 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
         print('[%d/%d], loss_D %.3f, loss_G %.3f - critic %s, ptime %.2fs' % \
                 ((epoch + 1), num_epochs, D_losses/num_iter,
                 G_losses/num_iter, str_critic, per_epoch_ptime))
-#        p = 'CelebA_DCGAN_results/Random_results/CelebA_DCGAN_' + str(epoch + 1) + '.png'
-#        fixed_p = 'CelebA_DCGAN_results/Fixed_results/CelebA_DCGAN_' + str(epoch + 1) + '.png'
-#        show_result((epoch+1), save=True, path=p, isFix=False)
-#        show_result((epoch+1), save=True, path=fixed_p, isFix=True)
         train_hist['D_losses'].append(D_losses/num_iter)
         train_hist['G_losses'].append(G_losses/num_iter)
         train_hist['per_epoch_ptimes'].append(per_epoch_ptime)

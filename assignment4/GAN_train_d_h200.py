@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 # # # #
-# GAN_train_b.py
+# GAN_train_d.py
 # @author Zhibin.LU
 # @created Tue Apr 17 2018 11:18:27 GMT-0400 (EDT)
-# @last-modified Thu Apr 19 2018 09:12:59 GMT-0400 (EDT)
+# @last-modified Thu Apr 19 2018 01:40:25 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -54,15 +54,14 @@ importlib.reload(GAN_CelebA)
 # img_root = 'C:/Users/lingyu.yue/Documents/Xiao_Fan/GAN/img_align_celeba/resized_celebA/'
 img_root = "img_align_celeba/resized_celebA/"
 IMAGE_RESIZE = 64
-
-sample_num=9000
+sample_num=5000
 train_sampler = range(sample_num) #2000,4000, 150000
 
 batch_size = 128
 lr_d = 0.001 #0.001, 0.0002
-lr_g = 0.0009 #0.001, 0.0002
+lr_g = 0.0005 #0.001, 0.0002
 train_epoch = 50
-hidden_dim = 100
+hidden_dim = 200
 critic_max=15
 
 use_cuda = torch.cuda.is_available()
@@ -100,10 +99,26 @@ BCE_loss = nn.BCELoss()
 #model = VAE()
 
 '''
-Bilinear Upsampling followed by regular convolution.
+Deconvolution (transposed convolution) with paddings and strides
 '''
+
+# G = GAN_CelebA.generator(128,hidden_dim)
+# D = GAN_CelebA.discriminator(128)
+# G.weight_init(mean=0.0, std=0.02)
+# D.weight_init(mean=0.0, std=0.02)
+# if use_cuda : 
+#     G.cuda()
+#     D.cuda()
+# # Adam optimizer
+# G_optimizer = optim.Adam(G.parameters(), lr=lr, betas=(0.5, 0.999))
+# D_optimizer = optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
+
+# train_hist = GAN_CelebA.train(G,D,G_optimizer,D_optimizer,train_data_loader,BCE_loss,train_epoch,hidden_dim,critic=1)
+# GAN_CelebA.saveCheckpoint(G,D,train_hist,'GANDeconvolution_t4000_h100_ep20.c1',use_cuda)
+
+# Dynamic critic of grandiant descent between Distriminator and Generator.
+G = GAN_CelebA.generator(128,hidden_dim)
 D = GAN_CelebA.discriminator(128)
-G = GAN_CelebA.generator_Upsampling(128, hidden_dim,'bilinear')
 G.weight_init(mean=0.0, std=0.02)
 D.weight_init(mean=0.0, std=0.02)
 if use_cuda : 
@@ -113,7 +128,6 @@ if use_cuda :
 G_optimizer = optim.Adam(G.parameters(), lr=lr_g, betas=(0.5, 0.999))
 D_optimizer = optim.Adam(D.parameters(), lr=lr_d, betas=(0.5, 0.999))
 
-train_hist = GAN_CelebA.train3(G,D,G_optimizer,D_optimizer,train_data_loader,\
-        BCE_loss,train_epoch,hidden_dim,critic_max=critic_max,savepath='GANBilinear_t'+str(sample_num)+'_h'+str(hidden_dim)+'_train3')
-GAN_CelebA.saveCheckpoint(G,D,train_hist,'GANBilinear_t'+str(sample_num)+'_h'+str(hidden_dim)+'_ep50.train3',use_cuda)
-
+train_hist = GAN_CelebA.train2(G,D,G_optimizer,D_optimizer,train_data_loader,\
+        BCE_loss,train_epoch,hidden_dim,critic_max=critic_max,savepath='GANDeconv_t'+str(sample_num)+'_h'+str(hidden_dim)+'_train2')
+GAN_CelebA.saveCheckpoint(G,D,train_hist,'GANDeconv_t'+str(sample_num)+'_h'+str(hidden_dim)+'_ep50.train2',use_cuda)

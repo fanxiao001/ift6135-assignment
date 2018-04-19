@@ -5,7 +5,7 @@
 # GAN_train_n.py
 # @author Zhibin.LU
 # @created Tue Apr 17 2018 11:18:27 GMT-0400 (EDT)
-# @last-modified Wed Apr 18 2018 18:57:23 GMT-0400 (EDT)
+# @last-modified Thu Apr 19 2018 09:14:15 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -55,7 +55,7 @@ importlib.reload(GAN_CelebA)
 img_root = "img_align_celeba/resized_celebA/"
 IMAGE_RESIZE = 64
 
-sample_num=10000
+sample_num=9000
 train_sampler = range(sample_num) #2000,4000, 150000
 
 batch_size = 128
@@ -63,7 +63,7 @@ lr_d = 0.0008 #0.001, 0.0002
 lr_g = 0.001 #0.001, 0.0002
 train_epoch = 50
 hidden_dim = 100
-critic_max=10
+critic_max=15
 
 use_cuda = torch.cuda.is_available()
 torch.manual_seed(999)
