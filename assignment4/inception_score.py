@@ -17,42 +17,46 @@ import numpy as np
 from scipy.stats import entropy
 
 
-def Wasserstein_distance(x_, z_, generator,discriminator, batch_size=32, cuda=True):
+def Wasserstein_distance(x_dataset, z_tensor, generator,w_discriminator, batch_size=32, cuda=True):
     """Computes the Wasserstein_distance of the generated images
     cuda -- whether or not to run on GPU
 
-    splits -- number of splits
-    
     """
 
-    sample_num=len(z_)
-    dataloader_x = torch.utils.data.DataLoader(
-        x_, batch_size=batch_size, sampler=range(sample_num), num_workers=10)
+    sample_num=len(z_tensor)
+    train_sampler = range(sample_num)
 
-    dataloader_z = torch.utils.data.DataLoader(
-            z_, batch_size=batch_size, shuffle=False)
-    
+    x_dataloader =  torch.utils.data.DataLoader(
+            x_dataset, batch_size=batch_size, sampler=train_sampler, num_workers=10)
 
-    w_dis=[]
-    for x, z in zip(dataloader_x, dataloader_z):
+    z_dataset  = torch.utils.data.TensorDataset(
+        z_tensor,torch.zeros(len(z_tensor)))
+    z_dataloader = torch.utils.data.DataLoader(
+        z_dataset, batch_size=batch_size, shuffle=False)
 
-        # if cuda :
-        #     x,z = Variable(x.cuda()), Variable(z.cuda())
-        # else :
-        #     x, z = Variable(x),Variable(z)
 
-        # x = x.type(dtype)
-        # z = z.type(dtype)
-        generator.eval()
-        discriminator.eval()
-        D_x = discriminator(x) 
-        D_z = discriminator(generator(Variable(z))) 
-        w_distance=D_x - D_z
-        generator.train()
-        discriminator.train()
-        w_dis.append(w_distance)
+    generator.eval()
+    w_discriminator.eval()
+    distances=[]
+    for x, z in zip(x_dataloader, z_dataloader):
+        x ,_ = x
+        z ,_ = z
 
-    return np.mean(w_dis)
+        if cuda :
+            x,z = Variable(x.cuda()), Variable(z.cuda())
+        else :
+            x, z = Variable(x),Variable(z)
+
+        D_x = w_discriminator(x) 
+        D_z = w_discriminator(generator(z))
+        # w_distance=torch.abs(D_x - D_z)
+        w_distance=-(D_x - D_z)
+        distances.append(w_distance.data[0])
+
+    generator.train()
+    w_discriminator.train()
+
+    return np.mean(distances)
 
 
 def inception_score2(generator, num_batch, batch_size=32, cuda=True, resize=False, splits=1):
