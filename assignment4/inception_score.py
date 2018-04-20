@@ -16,6 +16,45 @@ from torchvision.models.inception import inception_v3
 import numpy as np
 from scipy.stats import entropy
 
+
+def Wasserstein_distance(x_, z_, generator,discriminator, batch_size=32, cuda=True):
+    """Computes the Wasserstein_distance of the generated images
+    cuda -- whether or not to run on GPU
+
+    splits -- number of splits
+    
+    """
+
+    sample_num=len(z_)
+    dataloader_x = torch.utils.data.DataLoader(
+        x_, batch_size=batch_size, sampler=range(sample_num), num_workers=10)
+
+    dataloader_z = torch.utils.data.DataLoader(
+            z_, batch_size=batch_size, shuffle=False)
+    
+
+    w_dis=[]
+    for x, z in zip(dataloader_x, dataloader_z):
+
+        # if cuda :
+        #     x,z = Variable(x.cuda()), Variable(z.cuda())
+        # else :
+        #     x, z = Variable(x),Variable(z)
+
+        # x = x.type(dtype)
+        # z = z.type(dtype)
+        generator.eval()
+        discriminator.eval()
+        D_x = discriminator(x) 
+        D_z = discriminator(generator(Variable(z))) 
+        w_distance=D_x - D_z
+        generator.train()
+        discriminator.train()
+        w_dis.append(w_distance)
+
+    return np.mean(w_dis)
+
+
 def inception_score2(generator, num_batch, batch_size=32, cuda=True, resize=False, splits=1):
     """Computes the inception score of the generated images imgs
     cuda -- whether or not to run on GPU
@@ -71,7 +110,7 @@ def inception_score2(generator, num_batch, batch_size=32, cuda=True, resize=Fals
 
 
 
-def inception_score(z_, generator, batch_size=32, cuda=True, resize=False, splits=1):
+def inception_score(z_, generator, batch_size=32, cuda=True, resize=True, splits=1):
     """Computes the inception score of the generated images imgs
     cuda -- whether or not to run on GPU
 

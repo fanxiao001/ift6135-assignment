@@ -527,17 +527,6 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
     # ini_threshold=0.8 #0.8->0.3, -log0.5=0.693
         
     for epoch in range(num_epochs):
-    
-        # learning rate decay
-        # if (epoch+1) == 11:
-        #     G_optimizer.param_groups[0]['lr'] /= 10
-        #     D_optimizer.param_groups[0]['lr'] /= 10
-        #     print("learning rate change!")
-    
-        # if (epoch+1) == 16:
-        #     G_optimizer.param_groups[0]['lr'] /= 10
-        #     D_optimizer.param_groups[0]['lr'] /= 10
-        #     print("learning rate change!")
             
         # threshold=ini_threshold-epoch*(ini_threshold-0.3)/num_epochs
     
@@ -564,13 +553,12 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
             D_loss_sum = 0
             for n in range(1,critic_max+1) :
                 
-                # train discriminator D : maximize E[log(D(x))]+E[log(1-D(G(z)))], minimize -[]
                 discriminator.zero_grad()
         
                 #mean(f(x))
                 D_result_r = discriminator(x_) #(batch,100,1,1) => (batch,100)
                 
-                #grandiant mean(f(x))
+                #grandiant mean(-f(x))
                 D_result_r.backward(mone)
 
                 z_ = torch.randn((mini_batch, hidden_size)).view(-1, hidden_size, 1, 1)
@@ -583,7 +571,7 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
                 #mean(f(z))
                 D_result_f = discriminator(G_result)
                 
-                #grandiant -mean(f(z))
+                #grandiant mean(f(z))
                 D_result_f.backward(one)
 
                 D_optimizer.step()
@@ -923,7 +911,8 @@ def show_result(G,D,num_epoch, hidden_size = 100, show = False, save = False, pa
 
     label = 'Epoch {0}'.format(num_epoch)
     fig.text(0.5, 0.04, label, ha='center')
-    plt.savefig(path)
+    if save:
+        plt.savefig(path)
 
     if show:
         plt.show()
@@ -934,6 +923,7 @@ def compareRandomPoint(x_0,x_1,G,chooseRandn, hidden_size = 100, show = False, s
 
     for i in range(chooseRandn):
         z_0 = torch.randn(hidden_size)
+    for i in range(chooseRandn*2):
         z_1 = torch.randn(hidden_size)
 
     z_prime=torch.zeros(11,hidden_size)
@@ -970,7 +960,8 @@ def compareRandomPoint(x_0,x_1,G,chooseRandn, hidden_size = 100, show = False, s
         ax[1, k].imshow((test_images[k].cpu().data.numpy().transpose(1, 2, 0) + 1) / 2)
 
     fig.text(0.5, 0.04, label, ha='center')
-    plt.savefig(path)
+    if save:
+        plt.savefig(path)
 
     if show:
         plt.show()
