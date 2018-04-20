@@ -16,6 +16,22 @@ from torchvision.models.inception import inception_v3
 import numpy as np
 from scipy.stats import entropy
 
+import os
+import time
+import matplotlib.pyplot as plt
+from scipy.misc import imresize
+import torch
+from torch.autograd import Variable
+import torch.nn.functional as F
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+import random
+from torchvision.utils import save_image
+import torchvision.transforms as transforms
+import torchvision.datasets as datasets
+from PIL import Image
+import itertools
 
 def Wasserstein_distance(x_dataset, z_tensor, generator,w_discriminator, batch_size=32, cuda=True):
     """Computes the Wasserstein_distance of the generated images
@@ -34,6 +50,9 @@ def Wasserstein_distance(x_dataset, z_tensor, generator,w_discriminator, batch_s
     z_dataloader = torch.utils.data.DataLoader(
         z_dataset, batch_size=batch_size, shuffle=False)
 
+    if use_cuda:
+        generator.cuda()
+        w_discriminator.cuda()
 
     generator.eval()
     w_discriminator.eval()
@@ -49,8 +68,8 @@ def Wasserstein_distance(x_dataset, z_tensor, generator,w_discriminator, batch_s
 
         D_x = w_discriminator(x) 
         D_z = w_discriminator(generator(z))
-        w_distance=torch.abs(D_x - D_z)
-        # w_distance=-(D_x - D_z)
+        # w_distance=torch.abs(D_x - D_z)
+        w_distance=D_x - D_z
         distances.append(w_distance.data[0])
 
     generator.train()
@@ -76,6 +95,9 @@ def inception_score2(generator, num_batch, batch_size=32, cuda=True, resize=Fals
         if torch.cuda.is_available():
             print("WARNING: You have a CUDA device, so you should probably set cuda=True")
         dtype = torch.FloatTensor
+
+    if cuda:
+        generator.cuda()
 
     # Load inception model
     inception_model = inception_v3(pretrained=True, transform_input=False).type(dtype)
@@ -132,6 +154,9 @@ def inception_score(z_, generator, batch_size=32, cuda=True, resize=True, splits
             print("WARNING: You have a CUDA device, so you should probably set cuda=True")
         dtype = torch.FloatTensor
 
+    if cuda:
+        generator.cuda()
+
     # Load inception model
     inception_model = inception_v3(pretrained=True, transform_input=False).type(dtype)
     inception_model.eval();
@@ -166,6 +191,8 @@ def inception_score(z_, generator, batch_size=32, cuda=True, resize=True, splits
 
     return np.mean(split_scores), np.std(split_scores)
 
+
+
 if __name__=='__main__':
 
     import os
@@ -181,10 +208,22 @@ if __name__=='__main__':
     import GAN_CelebA
     importlib.reload(GAN_CelebA)
 
+    img_root = "img_align_celeba/resized_celebA/"
+    IMAGE_RESIZE = 64
+    Z_SAMPLE_NUM=10000
+    BATCH_SIZE=2
+
     use_cuda = torch.cuda.is_available()
     torch.manual_seed(999)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(999)
+
+    data_transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
+    ])
+    dataset = datasets.ImageFolder(root=img_root, transform=data_transform)
+
 
     model_files=[
         '1_GANBilinear_t9900_h100_train3_ep33   ',            
@@ -200,35 +239,45 @@ if __name__=='__main__':
         '2_GANDeconv_t9999_h100_train2_ep9      ',    
         '2_GAN_W_fixlr_t10000_h100_b64_c5_ep18  ',        
         '2_GAN_W_fixlr_t10000_h200_b64_c5_ep18  ',        
-        '2_GANnearest_t9900_h100_train3_ep9     ',    
+        '2_GANnearest_t10000_h100_ep18_new      ',    
         '3_GANBilinear_t9900_h100_train3_ep6    ',        
         '3_GANDeconv_t9900_h100_train3_ep6      ',    
         '3_GANDeconv_t9900_h200_train3_ep6      ',    
         '3_GANDeconv_t9999_h100_train2_ep6      ',    
         '3_GAN_W_fixlr_t10000_h100_b64_c5_ep6   ',        
         '3_GAN_W_fixlr_t10000_h200_b64_c5_ep6   ',        
-        '3_GANnearest_t9900_h100_train3_ep3     ',    
-        '4_bad_GANnearest_t9900_h100_train3_ep27  ',        
-        '4_bad_GANnearest_t9900_h100_train3_ep45  '        
+        '3_GANnearest_t10000_h100_ep6_new       ',    
+        '4_bad_GANnearest_t9900_h100_train3_ep27',        
+        '4_bad_GANnearest_t9900_h100_train3_ep45'        
         ]
 
     print('model num:',len(model_files))
 
-    dir='./checkpoint/score_models/'
+    dir='./score_models/'
+    
+    inception_scores_u={'group1':[],'group2':[],'group3':[],'group4':[]}
+    inception_scores_s={'group1':[],'group2':[],'group3':[],'group4':[]}
+    w_distances={'group1':[],'group2':[],'group3':[],'group4':[]}
 
     _,D100_W,train_hist = GAN_CelebA.loadCheckpoint_W('1_GAN_W_fixlr_t10000_h100_b64_c5_ep45',100,use_cuda=use_cuda,dir=dir)
     _,D200_W,train_hist = GAN_CelebA.loadCheckpoint_W('1_GAN_W_fixlr_t10000_h200_b64_c5_ep45',200,use_cuda=use_cuda,dir=dir)
-    
+
+    test_z_100 = torch.randn(Z_SAMPLE_NUM,100,1,1)
+    test_z_200 = torch.randn(Z_SAMPLE_NUM,200,1,1)
+
     for filename in model_files:
 
         filename = filename.strip()
-        if filename.find('h100')>-1:
+        if filename.find('h100_')>-1:
             hidden_dim=100
-        if filename.find('h200')>-1:
+            test_z=test_z_100
+        if filename.find('h200_')>-1:
             hidden_dim=200
+            test_z=test_z_200
 
+        print('filename: ',filename)
         if filename.find('Bilinear')>-1:
-            G,D,_=GAN_CelebA.loadCheckpoint_Upsampling(filename,hidden_dim,use_cuda=use_cuda,mode='bilinear',dir=dir)
+            G,D,_=GAN_CelebA.loadCheckpoint_Upsampling_old(filename,hidden_dim,use_cuda=use_cuda,mode='bilinear',dir=dir)
         
         if filename.find('Deconv')>-1:
             G,D,_=GAN_CelebA.loadCheckpoint(filename,hidden_dim,use_cuda=use_cuda,dir=dir)
@@ -242,28 +291,48 @@ if __name__=='__main__':
             else:
                 G,D,_=GAN_CelebA.loadCheckpoint_Upsampling_old(filename,hidden_dim,use_cuda=use_cuda,mode='nearest',dir=dir)
 
-        inception_score_model1=[]
-        inception_score_model2=[]
-        inception_score_model3=[]
-        inception_score_model4=[]
-
-        test_z = torch.randn(10,hidden_dim,1,1)
-
-        ince_score=inception_score(test_z, G, batch_size=32, cuda=use_cuda, resize=True, splits=10)
+        ince_score_u,ince_score_s=inception_score(test_z, G, batch_size=BATCH_SIZE, cuda=use_cuda, resize=True, splits=10)
         
         if filename.startswith('1_'):
-            inception_score_model1.append(ince_score)
+            inception_scores_u['group1'].append(ince_score_u)
         if filename.startswith('2_'):
-            inception_score_model2.append(ince_score)
+            inception_scores_u['group2'].append(ince_score_u)
         if filename.startswith('3_'):
-            inception_score_model3.append(ince_score)
+            inception_scores_u['group3'].append(ince_score_u)
         if filename.startswith('4_'):
-            inception_score_model4.append(ince_score)
+            inception_scores_u['group4'].append(ince_score_u)
 
+        if filename.startswith('1_'):
+            inception_scores_s['group1'].append(ince_score_s)
+        if filename.startswith('2_'):
+            inception_scores_s['group2'].append(ince_score_s)
+        if filename.startswith('3_'):
+            inception_scores_s['group3'].append(ince_score_s)
+        if filename.startswith('4_'):
+            inception_scores_s['group4'].append(ince_score_s)
 
-        G,D,train_hist = GAN_CelebA.loadCheckpoint(filename,hidden_dim,use_cuda=use_cuda)
-        epoch_num=len(train_hist['D_losses'])
+        if filename.find('_h200_')>-1:
+            w_score=Wasserstein_distance(dataset,test_z, G, D200_W, batch_size=BATCH_SIZE, cuda=use_cuda)
+        else:
+            w_score=Wasserstein_distance(dataset,test_z, G, D100_W, batch_size=BATCH_SIZE, cuda=use_cuda)
 
-        test_z = torch.randn(1000,hidden_dim,1,1)
-        w_score=Wasserstein_distance(dataset,test_z, G, D, batch_size=32, cuda=use_cuda)
-        print('Wasserstein distance: ',score)
+        if filename.startswith('1_'):
+            w_distances['group1'].append(w_score)
+        if filename.startswith('2_'):
+            w_distances['group2'].append(w_score)
+        if filename.startswith('3_'):
+            w_distances['group3'].append(w_score)
+        if filename.startswith('4_'):
+            w_distances['group4'].append(w_score)
+
+    
+    print('Saving..')
+    state = {
+        'model_files':model_files,
+        'inception_scores_u':  inception_scores_u,
+        'inception_scores_s':  inception_scores_s,
+        'w_distances': w_distances
+    }
+    if not os.path.isdir('checkpoint'):
+        os.mkdir('checkpoint')
+    torch.save(state, './checkpoint/GAN_model_scores')
