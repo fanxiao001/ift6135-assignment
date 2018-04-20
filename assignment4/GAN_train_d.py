@@ -5,7 +5,7 @@
 # GAN_train_d.py
 # @author Zhibin.LU
 # @created Tue Apr 17 2018 11:18:27 GMT-0400 (EDT)
-# @last-modified Fri Apr 20 2018 10:24:11 GMT-0400 (EDT)
+# @last-modified Fri Apr 20 2018 14:39:36 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -57,9 +57,9 @@ IMAGE_RESIZE = 64
 sample_num=9900
 train_sampler = range(sample_num) #2000,4000, 150000
 
-batch_size = 128
-lr_d = 0.0002 #0.001, 0.0002
-lr_g = 0.0002 #0.001, 0.0002
+batch_size = 64
+lr_d = 0.0004 #0.001, 0.0002
+lr_g = 0.0004 #0.001, 0.0002
 train_epoch = 50
 hidden_dim = 100
 critic_max=15

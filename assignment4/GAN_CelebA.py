@@ -662,11 +662,11 @@ def saveCheckpoint(generator,discriminator,train_hist, path='GAN', use_cuda=True
         generator.cuda()
         discriminator.cuda()
 
-def loadCheckpoint(path='GAN', hidden_size = 100, use_cuda=True):
+def loadCheckpoint(path='GAN', hidden_size = 100, use_cuda=True,dir='./checkpoint/'):
     dtype = torch.FloatTensor
     print('==> Resuming from checkpoint..')
-    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./checkpoint/'+path)
+    assert os.path.isdir(dir), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load(dir+path)
     generator_params = checkpoint['generator']
     discriminator_params = checkpoint['discriminator']
     G = generator(128,hidden_size)
@@ -680,11 +680,11 @@ def loadCheckpoint(path='GAN', hidden_size = 100, use_cuda=True):
 
     return G,D,train_hist
 
-def loadCheckpoint_Upsampling(path='GAN', hidden_size = 100, use_cuda=True,mode='nearest'):
+def loadCheckpoint_Upsampling(path='GAN', hidden_size = 100, use_cuda=True,mode='nearest',dir='./checkpoint/'):
     dtype = torch.FloatTensor
     print('==> Resuming from checkpoint..')
-    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./checkpoint/'+path)
+    assert os.path.isdir(dir), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load(dir+path)
     generator_params = checkpoint['generator']
     discriminator_params = checkpoint['discriminator']
     if mode=='nearest':
@@ -701,11 +701,11 @@ def loadCheckpoint_Upsampling(path='GAN', hidden_size = 100, use_cuda=True,mode=
 
     return G,D,train_hist
     
-def loadCheckpoint_Upsampling_old(path='GAN', hidden_size = 100, use_cuda=True,mode='nearest'):
+def loadCheckpoint_Upsampling_old(path='GAN', hidden_size = 100, use_cuda=True,mode='nearest',dir='./checkpoint/'):
     dtype = torch.FloatTensor
     print('==> Resuming from checkpoint..')
-    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./checkpoint/'+path)
+    assert os.path.isdir(dir), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load(dir+path)
     generator_params = checkpoint['generator']
     discriminator_params = checkpoint['discriminator']
     if mode=='nearest':
@@ -722,11 +722,11 @@ def loadCheckpoint_Upsampling_old(path='GAN', hidden_size = 100, use_cuda=True,m
 
     return G,D,train_hist
 
-def loadCheckpoint_W(path='GAN', hidden_size = 100, use_cuda=True):
+def loadCheckpoint_W(path='GAN', hidden_size = 100, use_cuda=True,dir='./checkpoint/'):
     dtype = torch.FloatTensor
     print('==> Resuming from checkpoint..')
-    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load('./checkpoint/'+path)
+    assert os.path.isdir(dir), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load(dir+path)
     generator_params = checkpoint['generator']
     discriminator_params = checkpoint['discriminator']
     G = generator(128,hidden_size)
@@ -839,7 +839,7 @@ class generator_Upsampling_old(nn.Module):
     '''
     # initializers
     def __init__(self, d=128, hidden_size=100, mode='nearest'):
-        super(generator_Upsampling, self).__init__()
+        super(generator_Upsampling_old, self).__init__()
         self.upsampling1 = nn.Upsample(scale_factor=4,mode=mode) #1->4 input(batch,100,1,1)=>(batch,100,4,4)
         self.conv1 = nn.Conv2d(hidden_size, d*8, 3, 1, 1) # => (batch,d*8,4,4) (110)(4-1+0)/1+1 (4-k+2p)/s+1 (4-3+2)/1+1
         self.conv1_bn = nn.BatchNorm2d(d*8)
