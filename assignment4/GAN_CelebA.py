@@ -700,6 +700,27 @@ def loadCheckpoint_Upsampling(path='GAN', hidden_size = 100, use_cuda=True,mode=
     train_hist = checkpoint['train_hist']
 
     return G,D,train_hist
+    
+def loadCheckpoint_Upsampling_old(path='GAN', hidden_size = 100, use_cuda=True,mode='nearest'):
+    dtype = torch.FloatTensor
+    print('==> Resuming from checkpoint..')
+    assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load('./checkpoint/'+path)
+    generator_params = checkpoint['generator']
+    discriminator_params = checkpoint['discriminator']
+    if mode=='nearest':
+        G = generator_Upsampling_old(128, hidden_size,'nearest')
+    else:
+        G=generator_Upsampling_old(128, hidden_size,'bilinear')
+    G.load_state_dict(generator_params)
+    D = discriminator(128)
+    D.load_state_dict(discriminator_params)
+    if use_cuda :
+        G.cuda()
+        D.cuda()
+    train_hist = checkpoint['train_hist']
+
+    return G,D,train_hist
 
 def loadCheckpoint_W(path='GAN', hidden_size = 100, use_cuda=True):
     dtype = torch.FloatTensor
@@ -775,8 +796,44 @@ class generator(nn.Module):
         x = F.tanh(self.deconv5(x)) #output (batch,3,64,64)
 
         return x
-
+        
 class generator_Upsampling(nn.Module):
+    # initializers
+    def __init__(self, d=128, hidden_size=100, mode='nearest'):
+        super(generator_Upsampling, self).__init__()
+        self.upsampling1 = nn.Upsample(scale_factor=4,mode=mode) #1->4 input(batch,100,1,1)=>(batch,100,4,4)
+        self.conv1 = nn.Conv2d(hidden_size, d*8, 4, 2, 3) # => (batch,d*4,4,4)=>(batch,d*8,4,4)   (4-4+3*2)/2+1=4
+        self.conv1_bn = nn.BatchNorm2d(d*8)
+        self.upsampling2 = nn.Upsample(scale_factor=4,mode=mode) #=>(batch,d*8,16,16)
+        self.conv2 = nn.Conv2d(d*8, d*4, 4, 2, 1) #=>(batch,d*4,8,8)
+        self.conv2_bn = nn.BatchNorm2d(d*4)
+        self.upsampling3 = nn.Upsample(scale_factor=4,mode=mode) #=>(batch,d*4,32,32)
+        self.conv3 = nn.Conv2d(d*4, d*2, 4, 2, 1) #=>(batch,d*2,16,16)
+        self.conv3_bn = nn.BatchNorm2d(d*2)
+        self.upsampling4 = nn.Upsample(scale_factor=4,mode=mode) #=>(batch,d*2,64,64)
+        self.conv4 = nn.Conv2d(d*2, d, 4, 2, 1) #=>(batch,d,32,32)
+        self.conv4_bn = nn.BatchNorm2d(d)
+        self.upsampling5 = nn.Upsample(scale_factor=4,mode=mode) #=>(batch,d,128,128)
+        self.conv5 = nn.Conv2d(d, 3, 4, 2, 1)  #=>(batch,3,64,64)
+
+        self.hidden_size = hidden_size
+
+    # weight_init
+    def weight_init(self, mean, std):
+        for m in self._modules:
+            normal_init(self._modules[m], mean, std)
+
+    # forward method
+    def forward(self, input):
+        x = F.relu(self.conv1_bn(self.conv1(self.upsampling1(input))))
+        x = F.relu(self.conv2_bn(self.conv2(self.upsampling2(x))))
+        x = F.relu(self.conv3_bn(self.conv3(self.upsampling3(x))))
+        x = F.relu(self.conv4_bn(self.conv4(self.upsampling4(x))))
+        x = F.tanh(self.conv5(self.upsampling5(x)))
+
+        return x
+
+class generator_Upsampling_old(nn.Module):
     '''
     Nearest-Neighbor/Bilinear Upsampling followed by regular convolution
     '''
