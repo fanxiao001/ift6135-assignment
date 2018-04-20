@@ -523,7 +523,7 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
     if score : 
         test_z = torch.randn(10000,generator.hidden_size,1,1)
 
-    critic_max=1
+    # critic_max=1
     # ini_threshold=0.8 #0.8->0.3, -log0.5=0.693
         
     for epoch in range(num_epochs):
@@ -571,7 +571,7 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
                 D_result_r = discriminator(x_) #(batch,100,1,1) => (batch,100)
                 
                 #grandiant mean(f(x))
-                D_result_r.backward(one)
+                D_result_r.backward(mone)
 
                 z_ = torch.randn((mini_batch, hidden_size)).view(-1, hidden_size, 1, 1)
                 if use_cuda : 
@@ -584,7 +584,7 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
                 D_result_f = discriminator(G_result)
                 
                 #grandiant -mean(f(z))
-                D_result_f.backward(mone)
+                D_result_f.backward(one)
 
                 D_optimizer.step()
                 
@@ -593,17 +593,20 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
 
                 '''
                 Wasserstein distance
-                mean(f(x)) - mean(f(z))
+                max(mean(f(x)) - mean(f(z)))
                 '''
-                D_loss_sum +=np.abs(D_result_r.data[0]-D_result_f.data[0])
+                # D_loss_sum +=np.abs(D_result_r.data[0]-D_result_f.data[0])
+                # D_loss=np.abs(D_result_r.data[0]-D_result_f.data[0])
+                D_loss=D_result_r.data[0]-D_result_f.data[0]
 
                 # if (D_real_loss.data[0]+D_fake_loss.data[0])/2<threshold: break  
     
-            D_losses+=D_loss_sum/n
+            # D_losses+=D_loss_sum/n
+            D_losses+=D_loss
             str_critic=str(n)
     
             G_loss_sum=0
-            for n in range(1,critic_max+1) :
+            for n in range(1,1+1) :
                 generator.zero_grad()
         
                 z_ = torch.randn((mini_batch, hidden_size)).view(-1, hidden_size, 1, 1)
@@ -615,11 +618,9 @@ def train_W(generator, discriminator, G_optimizer, D_optimizer,train_data_loader
                 G_result = generator(z_)
                 D_result = discriminator(G_result)
                 
-                D_result.backward(one)
+                D_result.backward(mone)
                 G_optimizer.step()
-
                 G_loss_sum += D_result.data[0]
-
                 # if G_train_loss.data[0]<threshold: break  
     
             G_losses+=G_loss_sum/n

@@ -5,7 +5,7 @@
 # GAN_WGAN_train.py
 # @author Zhibin.LU
 # @created Wed Apr 18 2018 10:52:03 GMT-0400 (EDT)
-# @last-modified Thu Apr 19 2018 12:41:13 GMT-0400 (EDT)
+# @last-modified Thu Apr 19 2018 22:20:32 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -60,11 +60,11 @@ IMAGE_RESIZE = 64
 sample_num=10000
 train_sampler = range(sample_num) #2000,4000, 150000
 
-batch_size = 128
-lr = 0.00005 #0.00005 0.001, 0.0002
+batch_size = 64
+lr = 0.0002 #0.00005  0.0002
 train_epoch = 50
 hidden_dim = 200
-critic_max=1
+critic_max=5
 
 use_cuda = torch.cuda.is_available()
 torch.manual_seed(999)
@@ -106,5 +106,5 @@ D_optimizer = optim.RMSprop(D.parameters(), lr=lr)
 
 train_hist = GAN_CelebA.train_W(G,D,G_optimizer,D_optimizer,train_data_loader,\
         Loss_fun=None,num_epochs=train_epoch,hidden_size=hidden_dim,critic_max=critic_max,\
-        score=False,savepath='GAN_W_fixlr_t'+str(sample_num)+'_h'+str(hidden_dim)+'_trainw')
-GAN_CelebA.saveCheckpoint(G,D,train_hist,'GAN_W_t'+str(sample_num)+'_h'+str(hidden_dim)+'_ep50.trainw',use_cuda)
+        score=False,savepath='GAN_W_fixlr_t'+str(sample_num)+'_h'+str(hidden_dim)+'_c5')
+GAN_CelebA.saveCheckpoint(G,D,train_hist,'GAN_W_t'+str(sample_num)+'_h'+str(hidden_dim)+'_ep50.c5',use_cuda)

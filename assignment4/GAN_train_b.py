@@ -5,7 +5,7 @@
 # GAN_train_b.py
 # @author Zhibin.LU
 # @created Tue Apr 17 2018 11:18:27 GMT-0400 (EDT)
-# @last-modified Thu Apr 19 2018 14:48:19 GMT-0400 (EDT)
+# @last-modified Thu Apr 19 2018 18:04:46 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
