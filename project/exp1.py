@@ -22,14 +22,18 @@ import random
 #%%
 
 class MLP(nn.Module) :
-    def __init__(self):
+    def __init__(self, activation='relu'):
         super(MLP, self).__init__()
         
         self.linear1 = nn.Linear(2,4) #input dimension:2
         self.linear2 = nn.Linear(4,2)
+        if activation == 'relu':
+            self.active = nn.ReLU() 
+        else :
+            self.active = nn.ELU()
     
     def forward(self,input):
-        x = F.relu(self.linear1(input))
+        x = self.active(self.linear1(input))
         x = self.linear2(x)
         return x
     
@@ -42,6 +46,36 @@ def adjust_lr(optimizer, epoch, total_epochs):
     lr = LR0 * (1.0/ np.sqrt(total_epochs))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+        
+def evaluate (model, valid_data) :
+    COUNTER = 0
+    ACCURACY = 0
+    for x_, y_ in valid_data :
+        x_, y_ = Variable(x_), Variable(y_)
+        out = model(x_)
+        _, predicted = torch.max(out, 1)
+        COUNTER += y_.size(0)
+        ACCURACY += float(torch.eq(predicted,y_).sum().data.numpy())
+    return ACCURACY / float(COUNTER) *100.0
+
+# evaluate on adversarial examples
+def evaluate_adversarial (model, valid_data, epsilon=0.1) :
+    COUNTER = 0
+    ACCURACY = 0
+    for x_, y_ in valid_data :
+        x_, y_ = Variable(x_,requires_grad=True), Variable(y_)
+        loss_true = loss_function(model(x_),y_)
+        loss_true.backward()
+        x_grad = x_.grad
+        x_adversarial = x_.clone()
+        x_adversarial.data = x_.data + epsilon * torch.sign(x_grad.data) * x_grad.data     
+        
+        x_.grad.data.zero_()
+        out = model(x_adversarial)
+        _, predicted = torch.max(out, 1)
+        COUNTER += y_.size(0)
+        ACCURACY += float(torch.eq(predicted,y_).sum().data.numpy())
+    return ACCURACY / float(COUNTER) *100.0
             
 def train(model,optimizer,loss_function, train_loader,num_epoch,lr_adjust=False) :
     for ep in range(num_epoch) :
@@ -53,7 +87,8 @@ def train(model,optimizer,loss_function, train_loader,num_epoch,lr_adjust=False)
             losses.append(loss.data[0])
             loss.backward()
             optimizer.step()
-        print ('Epoch %d, loss %f'%(ep, torch.mean(torch.FloatTensor(losses))))
+        print ('Epoch %d, loss %f, accuracy %.2f%%, accuracy adversarial %.2f%%'%(ep, torch.mean(torch.FloatTensor(losses))
+        ,evaluate(model,valid_data_loader), evaluate_adversarial(model,valid_data_loader)))
         
         if lr_adjust == True:
             adjust_lr(optimizer,ep+1,num_epoch) 
@@ -69,21 +104,17 @@ def train_FGM(model,optimizer,loss_function, train_loader,num_epoch, epsilon, lr
             loss_true.backward(half)
             x_grad = x_.grad
             x_adversarial = x_.clone()
-            x_adversarial.data = x_.data - epsilon * torch.sign(x_grad.data) * x_grad.data     
+            x_adversarial.data = x_.data + epsilon * torch.sign(x_grad.data) * x_grad.data     
             
             x_.grad.data.zero_()
             loss_adversarial = loss_function(model(x_adversarial),y_)
-            
-#            f2 = model(x_adversarial)
-#            _, predicted = torch.max(f2, 1)
-#            if((predicted.data == y_.data).sum()!=batch_size) :
-#                print ("attacked")
             
             loss_adversarial.backward(half)
             losses.append((loss_true.data[0]+loss_adversarial.data[0])/2.0)
 #            losses.append(loss_sum.data[0])
             optimizer.step()
-        print ('Epoch %d, loss %f'%(ep, torch.mean(torch.FloatTensor(losses))))
+        print ('Epoch %d, loss %f, accuracy %.2f%%, accuracy adversarial %.2f%%'%(ep, torch.mean(torch.FloatTensor(losses))
+        ,evaluate(model,valid_data_loader), evaluate_adversarial(model,valid_data_loader)))
         
         if lr_adjust == True:
             adjust_lr(optimizer,ep+1,num_epoch)
@@ -105,7 +136,7 @@ def train_WRM(model,optimizer,loss_function, train_loader,num_epoch,gamma,lr_adj
 
 def synthetic_data(N_example) : 
     data_x = np.zeros((N_example,2))
-    data_y = np.zeros(N_example) 
+    data_y = np.ones(N_example) 
     length = 0 
     while(length<N_example) :
         x = np.random.randn(100,2)
@@ -156,36 +187,40 @@ def init_seed(seed=123):
     torch.manual_seed(seed)
     random.seed(seed)
 #%%
-data_x, data_y = synthetic_data(10000)
-
+init_seed()
+train_x, train_y = synthetic_data(10000)
+valid_x, valid_y = synthetic_data(4000)
 
 #%%
-init_seed()
-LR0 = 0.1
+
+LR0 = 0.01
 batch_size = 128
 loss_function = nn.CrossEntropyLoss()
 
 train_data = torch.utils.data.TensorDataset(
-        torch.from_numpy(data_x).float(), torch.from_numpy(data_y).long())
+        torch.from_numpy(train_x).float(), torch.from_numpy(train_y).long())
+valid_data = torch.utils.data.TensorDataset(
+        torch.from_numpy(valid_x).float(), torch.from_numpy(valid_y).long())
 train_data_loader = torch.utils.data.DataLoader(
                 train_data, batch_size=batch_size, shuffle=True, num_workers=2)
+valid_data_loader = torch.utils.data.DataLoader(
+                valid_data, batch_size=batch_size, shuffle=True, num_workers=2)
 
-net_ERM = MLP()
+
+#%%
+net_ERM = MLP('elu')
 net_ERM.init_weights_glorot()
-
 optimizer = torch.optim.SGD(net_ERM.parameters(), lr=LR0, momentum = 0.9)
-
 train(net_ERM,optimizer,loss_function, train_data_loader,15)
 
 #%%
 
-net_FGM = MLP()
+net_FGM = MLP('elu')
 net_FGM.init_weights_glorot()
 
 optimizer = torch.optim.SGD(net_FGM.parameters(), lr=LR0, momentum = 0.9)
-
 train_FGM(net_FGM,optimizer,loss_function, train_data_loader,15, epsilon=0.1)
 
 #%%
 
-plotGraph([net_ERM,net_FGM],data_x, data_y)
+plotGraph([net_ERM,net_FGM],train_x, train_y)
