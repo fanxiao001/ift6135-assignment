@@ -178,7 +178,8 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             optimizer_zt = torch.optim.Adam([z_hat], lr=max_lr0)
             for n in range(T_adv) :
                 optimizer_zt.zero_grad()
-                loss_zt = - ( loss_function(model(z_hat),y_)- gamma*(torch.norm(z_hat-x_)**2))
+                # loss_zt = - ( loss_function(model(z_hat),y_)- gamma*(torch.norm(z_hat-x_)**2) )
+                loss_zt = - ( loss_function(model(z_hat),y_)- torch.mean(gamma*(torch.norm(z_hat-x_,2,1)**2)) )
                 loss_zt.backward()
                 optimizer_zt.step()
                 # adjust_lr_zt(optimizer_zt,max_lr0, n+1)
@@ -196,19 +197,19 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             adjust_lr(optimizer,min_lr0,ep+1,num_epoch) 
 
         # display    
-        mean_loss=torch.mean(torch.FloatTensor(losses)
+        mean_loss=torch.mean(torch.FloatTensor(losses))
         acc=evaluate(model,valid_loader)
-        acc_adv=evaluate_adversarial(model,valid_loader))
+        acc_adv=evaluate_adversarial(model,valid_loader)
         epoch_end_time = time.time()
         per_epoch_ptime = epoch_end_time - epoch_start_time
         print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial, %.2fs ptime.' \
             %(ep, mean_loss, acc, acc_adv, per_epoch_ptime))
         
-        if (epoch+1) % 3==0:
-            end_time = time.time()
-            total_ptime = end_time - start_time
-            # train_hist['total_ptime'].append(total_ptime)
-            saveCheckpoint(generator,discriminator,train_hist,savepath+'_ep'+str(epoch+1),use_cuda)
+        # if (epoch+1) % 3==0:
+        #     end_time = time.time()
+        #     total_ptime = end_time - start_time
+        #     # train_hist['total_ptime'].append(total_ptime)
+        #     saveCheckpoint(generator,discriminator,train_hist,savepath+'_ep'+str(epoch+1),use_cuda)
         
          
 def saveCheckpoint(model,train_hist, path='GAN', use_cuda=True) :
@@ -307,7 +308,6 @@ train_x, train_y = synthetic_data(10000)
 valid_x, valid_y = synthetic_data(4000)
 
 #%%
-
 if __name__=='__main__':
     
     use_cuda = torch.cuda.is_available()
@@ -326,12 +326,14 @@ if __name__=='__main__':
                     valid_data, batch_size=batch_size, shuffle=True, num_workers=2)
 
 
+#%%
+if __name__=='__main__':
     #%%
     LR0 = 0.01
     net_ERM = MLP()
     net_ERM.init_weights_glorot()
     optimizer = torch.optim.Adam(net_ERM.parameters(), lr=LR0)
-    train(net_ERM,optimizer,loss_function, train_data_loader,valid_data_loader,30,min_lr0=LR0,min_lr_adjust=False)
+    # train(net_ERM,optimizer,loss_function, train_data_loader,valid_data_loader,30,min_lr0=LR0,min_lr_adjust=False)
 
     #%%
     LR0 = 0.01
@@ -339,21 +341,18 @@ if __name__=='__main__':
     net_FGM.init_weights_glorot()
 
     optimizer = torch.optim.Adam(net_FGM.parameters(), lr=LR0)
-    train_FGM(net_FGM,optimizer,loss_function, train_data_loader,valid_data_loader, 30, epsilon=0.3,min_lr0=LR0,min_lr_adjust=False)
+    # train_FGM(net_FGM,optimizer,loss_function, train_data_loader,valid_data_loader, 30, epsilon=0.3,min_lr0=LR0,min_lr_adjust=False)
 
     #%%
     LR0 = 0.01
-    net_WRM = MLP(activation='elu')
+    MAX_LR0=0.08
+    net_WRM = MLP(activation='relu')
     # net_WRM = MLP()
     net_WRM.init_weights_glorot()
 
     optimizer = torch.optim.Adam(net_WRM.parameters(), lr=LR0)
-    train_WRM(net_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, 30 , max_lr0=0.001,min_lr0=LR0,min_lr_adjust=False)
+    train_WRM(net_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, 30 , max_lr0=MAX_LR0,min_lr0=LR0,min_lr_adjust=False)
 
-#%%
-if __name__=='__main__':
-    #%%
-    plotGraph([net_WRM],train_x, train_y)
 #%%
 if __name__=='__main__':
     plotGraph([net_ERM,net_FGM,net_WRM],train_x, train_y)
