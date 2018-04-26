@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 # # # #
-# model.py
+# mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Thu Apr 26 2018 13:15:39 GMT-0400 (EDT)
+# @last-modified Thu Apr 26 2018 14:57:13 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -36,6 +36,7 @@ print(os.getcwd())
 import  exp1
 importlib.reload(exp1)
 
+USE_CUDA=torch.cuda.is_available()
 
 '''
 Set hyper-parameters
@@ -44,15 +45,12 @@ TRAIN_EPOCH = 30 #10000
 BATCH_SIZE = 128
 LR0_MIN = 0.0001
 LR0_MAX = 0.0001
-GAMMA = 0.01 #0.04
+GAMMA = 0.01 #0.04 #0.01
 #number of adversarial iterations
 T_ADV = 15
 NO_CLASSES = 10
 TRAIN_DATA_SIZE = 50000
-# size of embedding layer
-EMBEDDING_SIZE = 512
 
-use_cuda = torch.cuda.is_available()
 exp1.init_seed()
 
 '''
@@ -117,6 +115,8 @@ if __name__=='__main__':
     loss_function=nn.CrossEntropyLoss()
 
     mnist_WRM=Mnist_Estimateur(activation='elu')
+    if USE_CUDA:
+        mnist_WRM=mnist_WRM.cuda()
     mnist_WRM.init_weights(mean=0.0, std=0.02)
     # optimizer = optim.Adam(mnist_WRM.parameters(), lr=LR0_MIN, betas=(0.5, 0.999))
     # optimizer = optim.RMSprop(mnist_WRM.parameters(), lr=LR0_MIN)

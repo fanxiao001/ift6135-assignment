@@ -17,8 +17,10 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-
 import random
+
+USE_CUDA=torch.cuda.is_available()
+
 #%%
 
 class MLP(nn.Module) :
@@ -59,6 +61,8 @@ def evaluate (model, valid_data) :
     COUNTER = 0
     ACCURACY = 0
     for x_, y_ in valid_data :
+        if USE_CUDA:
+            x_, y_ = x_.cuda(), y_.cuda()
         x_, y_ = Variable(x_), Variable(y_)
         out = model(x_)
         _, predicted = torch.max(out, 1)
@@ -71,11 +75,15 @@ def evaluate_adversarial (model, valid_data, epsilon=0.5) :
     COUNTER = 0
     ACCURACY = 0
     for x_, y_ in valid_data :
+        if USE_CUDA:
+            x_, y_ = x_.cuda(), y_.cuda()
         x_, y_ = Variable(x_,requires_grad=True), Variable(y_)
         loss_true = loss_function(model(x_),y_)
         loss_true.backward()
         x_grad = x_.grad
         x_adversarial = x_.clone()
+        if USE_CUDA:
+            x_adversarial = x_adversarial.cuda()
         x_adversarial.data = x_.data + epsilon * torch.sign(x_grad.data) * x_grad.data     
         
         x_.grad.data.zero_()
@@ -90,6 +98,8 @@ def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min
     for ep in range(num_epoch) :
         losses = []
         for x_, y_ in train_loader :
+            if USE_CUDA:
+                x_, y_ = x_.cuda(), y_.cuda()
             x_, y_ = Variable(x_), Variable(y_)
             optimizer.zero_grad()
             loss = loss_function(model(x_),y_)
@@ -97,11 +107,10 @@ def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min
             loss.backward()
             optimizer.step()
 
-        print ('%d epoch, %.3f loss, %.2f%% accuracy.'%(ep, torch.mean(torch.FloatTensor(losses))
-            ,evaluate(model,valid_loader)))
-        
-        # print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
-        #     ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
+        # print ('%d epoch, %.3f loss, %.2f%% accuracy.'%(ep, torch.mean(torch.FloatTensor(losses))
+        #     ,evaluate(model,valid_loader)))
+        print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
+            ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
         
         if min_lr_adjust == True:
             adjust_lr(optimizer,min_lr0,ep+1,num_epoch)
@@ -112,7 +121,8 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
         losses = []
         half = torch.FloatTensor([0.5])
         for x_, y_ in train_loader :
-            
+            if USE_CUDA:
+                x_, y_ = x_.cuda(), y_.cuda()
             #J = 0.5J(theta,x,y) + 0.5 J(theta,x_adversarial,y)
             x_, y_ = Variable(x_,requires_grad=True), Variable(y_)
             optimizer.zero_grad()
@@ -120,6 +130,8 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
             loss_true.backward(half)
             x_grad = x_.grad
             x_adversarial = x_.clone()
+            if USE_CUDA:
+                x_adversarial = x_adversarial.cuda()
             
             #L_infinity x_adv = x+epsilon*sign(grad_x)
             # x_adversarial.data = x_.data + epsilon * torch.sign(x_grad.data) 
@@ -131,8 +143,9 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
             loss_adversarial = loss_function(model(x_adversarial),y_)
             
             loss_adversarial.backward(half)
-            losses.append((loss_true.data[0]+loss_adversarial.data[0])/2.0)
             optimizer.step()
+
+            losses.append((loss_true.data[0]+loss_adversarial.data[0])/2.0)
         print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
             ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
         
@@ -141,10 +154,14 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
             
 def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoch,gamma=2,max_lr0=0.0001,min_lr0=0.001,min_lr_adjust=False) :
     T_adv = 15
+    start_time = time.time()
 #    half = torch.FloatTensor([0.5])
     for ep in range(num_epoch) :
+        epoch_start_time = time.time()
         losses = []
         for x_, y_ in train_loader :
+            if USE_CUDA:
+                x_, y_ = x_.cuda(), y_.cuda()
             x_, y_ = Variable(x_), Variable(y_)
             
 #            loss_true = loss_function(model(x_),y_)
@@ -152,6 +169,8 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             
             #initialize z_hat with x_
             z_hat = x_.data.clone()
+            if USE_CUDA:
+                z_hat = z_hat.cuda()
             z_hat = Variable(z_hat,requires_grad=True)
             
             #running the maximizer for z_hat
@@ -172,11 +191,57 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             losses.append(loss_adversarial.data[0])
             
             optimizer.step()
-        print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
-            ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
-        
+
         if min_lr_adjust == True:
             adjust_lr(optimizer,min_lr0,ep+1,num_epoch) 
+
+        # display    
+        mean_loss=torch.mean(torch.FloatTensor(losses)
+        acc=evaluate(model,valid_loader)
+        acc_adv=evaluate_adversarial(model,valid_loader))
+        epoch_end_time = time.time()
+        per_epoch_ptime = epoch_end_time - epoch_start_time
+        print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial, %.2fs ptime.' \
+            %(ep, mean_loss, acc, acc_adv, per_epoch_ptime))
+        
+        if (epoch+1) % 3==0:
+            end_time = time.time()
+            total_ptime = end_time - start_time
+            # train_hist['total_ptime'].append(total_ptime)
+            saveCheckpoint(generator,discriminator,train_hist,savepath+'_ep'+str(epoch+1),use_cuda)
+        
+         
+def saveCheckpoint(model,train_hist, path='GAN', use_cuda=True) :
+    print('Saving..')
+    state = {
+        'generator':  generator.cpu().state_dict() if use_cuda else generator.state_dict(),
+        'discriminator': discriminator.cpu().state_dict() if use_cuda else discriminator.state_dict(),
+        'train_hist' : train_hist
+    }
+    if not os.path.isdir('checkpoint'):
+        os.mkdir('checkpoint')
+    torch.save(state, './checkpoint/'+path)
+    if use_cuda:
+        generator.cuda()
+        discriminator.cuda()
+
+def loadCheckpoint(path='GAN', hidden_size = 100, use_cuda=True,dir='./checkpoint/'):
+    dtype = torch.FloatTensor
+    print('==> Resuming from checkpoint..')
+    assert os.path.isdir(dir), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load(dir+path)
+    generator_params = checkpoint['generator']
+    discriminator_params = checkpoint['discriminator']
+    G = generator(128,hidden_size)
+    G.load_state_dict(generator_params)
+    D = discriminator(128)
+    D.load_state_dict(discriminator_params)
+    if use_cuda :
+        G.cuda()
+        D.cuda()
+    train_hist = checkpoint['train_hist']
+
+    return G,D,train_hist   
 
 def synthetic_data(N_example) : 
     data_x = np.zeros((N_example,2))
@@ -185,10 +250,8 @@ def synthetic_data(N_example) :
     while(length<N_example) :
         x = np.random.randn(100,2)
         l2 = np.linalg.norm(x, axis=1)
-        x = x[np.any((l2>=1.35*np.sqrt(2),l2<=np.sqrt(2)*0.85), axis=0), :]
-        y = [1 if (np.linalg.norm(i) - np.sqrt(2)*1.0) > 0 else 0 for i in x]  
-        # x = x[np.any((l2>=1.3*np.sqrt(2),l2<=np.sqrt(2)/1.3), axis=0), :]
-        # y = [1 if (np.linalg.norm(i) - np.sqrt(2)) > 0 else 0 for i in x]  
+        x = x[np.any((l2>=1.3*np.sqrt(2),l2<=np.sqrt(2)/1.3), axis=0), :]
+        y = [1 if (np.linalg.norm(i) - np.sqrt(2)) > 0 else 0 for i in x]  
         if length+len(x) <= N_example :
             data_x[length:length+len(x),:] = x
             data_y[length:length+len(x)] = y
@@ -235,7 +298,7 @@ def init_seed(seed=123):
     np.random.seed(seed)
     torch.manual_seed(seed)
     random.seed(seed)
-    if torch.cuda.is_available():
+    if USE_CUDA:
         torch.cuda.manual_seed_all(seed)
 
 #%%
@@ -287,7 +350,10 @@ if __name__=='__main__':
     optimizer = torch.optim.Adam(net_WRM.parameters(), lr=LR0)
     train_WRM(net_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, 30 , max_lr0=0.001,min_lr0=LR0,min_lr_adjust=False)
 
+#%%
+if __name__=='__main__':
     #%%
-
-    # plotGraph([net_WRM],train_x, train_y)
+    plotGraph([net_WRM],train_x, train_y)
+#%%
+if __name__=='__main__':
     plotGraph([net_ERM,net_FGM,net_WRM],train_x, train_y)
