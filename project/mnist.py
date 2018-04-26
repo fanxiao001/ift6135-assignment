@@ -5,7 +5,7 @@
 # model.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Thu Apr 26 2018 12:51:22 GMT-0400 (EDT)
+# @last-modified Thu Apr 26 2018 13:15:39 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -121,5 +121,7 @@ if __name__=='__main__':
     # optimizer = optim.Adam(mnist_WRM.parameters(), lr=LR0_MIN, betas=(0.5, 0.999))
     # optimizer = optim.RMSprop(mnist_WRM.parameters(), lr=LR0_MIN)
     optimizer = torch.optim.Adam(mnist_WRM.parameters(), lr=LR0_MIN)
-    exp1.train_WRM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
-        TRAIN_EPOCH , max_lr0=LR0_MAX,min_lr0=LR0_MIN,min_lr_adjust=False)
+    exp1.train(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
+        TRAIN_EPOCH ,min_lr0=LR0_MIN,min_lr_adjust=False)
+    # exp1.train_WRM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
+    #     TRAIN_EPOCH , max_lr0=LR0_MAX,min_lr0=LR0_MIN,min_lr_adjust=False)

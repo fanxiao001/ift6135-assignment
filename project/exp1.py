@@ -44,8 +44,8 @@ class MLP(nn.Module) :
             if type(m) == nn.Linear:
                 nn.init.xavier_uniform(m.weight)
                 
-def adjust_lr(optimizer, epoch, total_epochs):
-    lr = LR0 * (0.1 ** (epoch / float(total_epochs)))
+def adjust_lr(optimizer, lr0, epoch, total_epochs):
+    lr = lr0 * (0.1 ** (epoch / float(total_epochs)))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
@@ -86,7 +86,7 @@ def evaluate_adversarial (model, valid_data, epsilon=0.5) :
     return ACCURACY / float(COUNTER) *100.0
 
 #basic training minimizing ERM          
-def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,lr_adjust=False) :
+def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min_lr0=0.001,min_lr_adjust=False) :
     for ep in range(num_epoch) :
         losses = []
         for x_, y_ in train_loader :
@@ -96,14 +96,18 @@ def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,lr_
             losses.append(loss.data[0])
             loss.backward()
             optimizer.step()
-        print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
-        ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
+
+        print ('%d epoch, %.3f loss, %.2f%% accuracy.'%(ep, torch.mean(torch.FloatTensor(losses))
+            ,evaluate(model,valid_loader)))
         
-        if lr_adjust == True:
-            adjust_lr_zt(optimizer,LR0,ep+1)
+        # print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
+        #     ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
+        
+        if min_lr_adjust == True:
+            adjust_lr(optimizer,min_lr0,ep+1,num_epoch)
             
 # one-step adversarial training using fast gradient L2
-def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epoch, epsilon, lr_adjust=False) :
+def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epoch, epsilon,min_lr0=0.001,min_lr_adjust=False) :
     for ep in range(num_epoch) :
         losses = []
         half = torch.FloatTensor([0.5])
@@ -130,10 +134,10 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
             losses.append((loss_true.data[0]+loss_adversarial.data[0])/2.0)
             optimizer.step()
         print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
-        ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
+            ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
         
-        if lr_adjust == True:
-            adjust_lr_zt(optimizer,LR0,ep+1)
+        if min_lr_adjust == True:
+            adjust_lr(optimizer,min_lr0,ep+1,num_epoch)
             
 def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoch,gamma=2,max_lr0=0.0001,min_lr0=0.001,min_lr_adjust=False) :
     T_adv = 15
@@ -172,7 +176,7 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
         
         if min_lr_adjust == True:
-            adjust_lr_zt(optimizer,min_lr0,ep+1) 
+            adjust_lr(optimizer,min_lr0,ep+1,num_epoch) 
 
 def synthetic_data(N_example) : 
     data_x = np.zeros((N_example,2))
@@ -242,7 +246,9 @@ valid_x, valid_y = synthetic_data(4000)
 #%%
 
 if __name__=='__main__':
-        
+    
+    use_cuda = torch.cuda.is_available()
+
     LR0 = 0.01
     batch_size = 128
     loss_function = nn.CrossEntropyLoss()
@@ -262,7 +268,7 @@ if __name__=='__main__':
     net_ERM = MLP()
     net_ERM.init_weights_glorot()
     optimizer = torch.optim.Adam(net_ERM.parameters(), lr=LR0)
-    train(net_ERM,optimizer,loss_function, train_data_loader,valid_data_loader,30, lr_adjust=False)
+    train(net_ERM,optimizer,loss_function, train_data_loader,valid_data_loader,30,min_lr0=LR0,min_lr_adjust=False)
 
     #%%
     LR0 = 0.01
@@ -270,7 +276,7 @@ if __name__=='__main__':
     net_FGM.init_weights_glorot()
 
     optimizer = torch.optim.Adam(net_FGM.parameters(), lr=LR0)
-    train_FGM(net_FGM,optimizer,loss_function, train_data_loader,valid_data_loader, 30, epsilon=0.3, lr_adjust=False)
+    train_FGM(net_FGM,optimizer,loss_function, train_data_loader,valid_data_loader, 30, epsilon=0.3,min_lr0=LR0,min_lr_adjust=False)
 
     #%%
     LR0 = 0.01
@@ -283,5 +289,5 @@ if __name__=='__main__':
 
     #%%
 
-    plotGraph([net_WRM],train_x, train_y)
-    # plotGraph([net_ERM,net_FGM,net_WRM],train_x, train_y)
+    # plotGraph([net_WRM],train_x, train_y)
+    plotGraph([net_ERM,net_FGM,net_WRM],train_x, train_y)
