@@ -71,7 +71,7 @@ def evaluate (model, valid_data) :
     return ACCURACY / float(COUNTER) *100.0
 
 # evaluate on adversarial examples
-def evaluate_adversarial (model, valid_data, epsilon=0.5) :
+def evaluate_adversarial (model, loss_function, valid_data, epsilon=0.5) :
     COUNTER = 0
     ACCURACY = 0
     for x_, y_ in valid_data :
@@ -110,7 +110,7 @@ def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min
         # print ('%d epoch, %.3f loss, %.2f%% accuracy.'%(ep, torch.mean(torch.FloatTensor(losses))
         #     ,evaluate(model,valid_loader)))
         print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
-            ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
+            ,evaluate(model,valid_loader), evaluate_adversarial(model,loss_function,valid_loader)))
         
         if min_lr_adjust == True:
             adjust_lr(optimizer,min_lr0,ep+1,num_epoch)
@@ -147,16 +147,17 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
 
             losses.append((loss_true.data[0]+loss_adversarial.data[0])/2.0)
         print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
-            ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
+            ,evaluate(model,valid_loader), evaluate_adversarial(model,loss_function,valid_loader)))
         
         if min_lr_adjust == True:
             adjust_lr(optimizer,min_lr0,ep+1,num_epoch)
             
-def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoch,gamma=2,max_lr0=0.0001,min_lr0=0.001,min_lr_adjust=False) :
+def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoch,gamma=2,max_lr0=0.0001,min_lr0=0.001,min_lr_adjust=False,savepath=None) :
     T_adv = 15
     start_time = time.time()
+    train_hist={}
 #    half = torch.FloatTensor([0.5])
-    for ep in range(num_epoch) :
+    for ep in range(1,num_epoch+1) :
         epoch_start_time = time.time()
         losses = []
         for x_, y_ in train_loader :
@@ -194,55 +195,47 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             optimizer.step()
 
         if min_lr_adjust == True:
-            adjust_lr(optimizer,min_lr0,ep+1,num_epoch) 
+            adjust_lr(optimizer,min_lr0,ep,num_epoch) 
 
         # display    
         mean_loss=torch.mean(torch.FloatTensor(losses))
         acc=evaluate(model,valid_loader)
-        acc_adv=evaluate_adversarial(model,valid_loader)
+        acc_adv=evaluate_adversarial(model,loss_function,valid_loader)
         epoch_end_time = time.time()
         per_epoch_ptime = epoch_end_time - epoch_start_time
         print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial, %.2fs ptime.' \
             %(ep, mean_loss, acc, acc_adv, per_epoch_ptime))
         
-        # if (epoch+1) % 3==0:
-        #     end_time = time.time()
-        #     total_ptime = end_time - start_time
-        #     # train_hist['total_ptime'].append(total_ptime)
-        #     saveCheckpoint(generator,discriminator,train_hist,savepath+'_ep'+str(epoch+1),use_cuda)
+        if savepath is not None and (ep % 3==0):
+            end_time = time.time()
+            total_ptime = end_time - start_time
+            # train_hist['total_ptime'].append(total_ptime)
+            saveCheckpoint(model,train_hist,savepath+'_ep'+str(ep))
         
          
-def saveCheckpoint(model,train_hist, path='GAN', use_cuda=True) :
-    print('Saving..')
+def saveCheckpoint(model,train_hist, filename='Model') :
+    # print('Saving..')
     state = {
-        'generator':  generator.cpu().state_dict() if use_cuda else generator.state_dict(),
-        'discriminator': discriminator.cpu().state_dict() if use_cuda else discriminator.state_dict(),
+        'model':  model.cpu().state_dict() if USE_CUDA else model.state_dict(),
         'train_hist' : train_hist
     }
     if not os.path.isdir('checkpoint'):
         os.mkdir('checkpoint')
-    torch.save(state, './checkpoint/'+path)
-    if use_cuda:
-        generator.cuda()
-        discriminator.cuda()
+    torch.save(state, './checkpoint/'+filename)
+    if USE_CUDA:
+        model.cuda()
 
-def loadCheckpoint(path='GAN', hidden_size = 100, use_cuda=True,dir='./checkpoint/'):
-    dtype = torch.FloatTensor
+def loadCheckpoint(model,filename='Model',path='./checkpoint/'):
     print('==> Resuming from checkpoint..')
-    assert os.path.isdir(dir), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load(dir+path)
-    generator_params = checkpoint['generator']
-    discriminator_params = checkpoint['discriminator']
-    G = generator(128,hidden_size)
-    G.load_state_dict(generator_params)
-    D = discriminator(128)
-    D.load_state_dict(discriminator_params)
-    if use_cuda :
-        G.cuda()
-        D.cuda()
+    assert os.path.isdir(path), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load(path+filename)
+    model_params = checkpoint['model']
+    model.load_state_dict(model_params)
+    if USE_CUDA :
+        model.cuda()
     train_hist = checkpoint['train_hist']
 
-    return G,D,train_hist   
+    return model,train_hist   
 
 def synthetic_data(N_example) : 
     data_x = np.zeros((N_example,2))
@@ -351,7 +344,7 @@ if __name__=='__main__':
     net_WRM.init_weights_glorot()
 
     optimizer = torch.optim.Adam(net_WRM.parameters(), lr=LR0)
-    train_WRM(net_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, 30 , max_lr0=MAX_LR0,min_lr0=LR0,min_lr_adjust=False)
+    train_WRM(net_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, 30 , max_lr0=MAX_LR0, min_lr0=LR0, min_lr_adjust=False)
 
 #%%
 if __name__=='__main__':

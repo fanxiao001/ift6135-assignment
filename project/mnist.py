@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Thu Apr 26 2018 14:57:13 GMT-0400 (EDT)
+# @last-modified Thu Apr 26 2018 18:15:34 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -38,14 +38,15 @@ importlib.reload(exp1)
 
 USE_CUDA=torch.cuda.is_available()
 
+
 '''
 Set hyper-parameters
 '''
 TRAIN_EPOCH = 30 #10000
-BATCH_SIZE = 128
-LR0_MIN = 0.0001
-LR0_MAX = 0.0001
-GAMMA = 0.01 #0.04 #0.01
+BATCH_SIZE = 2
+MIN_LR0 = 0.001
+MAX_LR0 = 0.001
+GAMMA = 0.1 #0.01 #0.04 #0.01
 #number of adversarial iterations
 T_ADV = 15
 NO_CLASSES = 10
@@ -120,8 +121,19 @@ if __name__=='__main__':
     mnist_WRM.init_weights(mean=0.0, std=0.02)
     # optimizer = optim.Adam(mnist_WRM.parameters(), lr=LR0_MIN, betas=(0.5, 0.999))
     # optimizer = optim.RMSprop(mnist_WRM.parameters(), lr=LR0_MIN)
-    optimizer = torch.optim.Adam(mnist_WRM.parameters(), lr=LR0_MIN)
-    exp1.train(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
-        TRAIN_EPOCH ,min_lr0=LR0_MIN,min_lr_adjust=False)
-    # exp1.train_WRM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
-    #     TRAIN_EPOCH , max_lr0=LR0_MAX,min_lr0=LR0_MIN,min_lr_adjust=False)
+    optimizer = torch.optim.Adam(mnist_WRM.parameters(), lr=MIN_LR0)
+
+    # exp1.train(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
+    #     TRAIN_EPOCH ,min_lr0=MIN_LR0,min_lr_adjust=False)
+
+    exp1.train_WRM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
+        TRAIN_EPOCH , GAMMA, max_lr0=MAX_LR0, min_lr0=MIN_LR0, min_lr_adjust=False, savepath='mnist_wrm_elu')
+        
+#%%
+if __name__=='__main__':
+
+    filename='mnist_wrm_elu_ep30'
+    mnist_WRM,_=exp1.loadCheckpoint(mnist_WRM,filename)
+
+    print('Accuracy on test data: ',exp1.evaluate(mnist_WRM,test_data_loader))
+        
