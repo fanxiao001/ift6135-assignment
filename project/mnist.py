@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# # # #
+# model.py
+# @author Zhibin.LU
+# @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
+# @last-modified Thu Apr 26 2018 12:51:22 GMT-0400 (EDT)
+# @website: https://louis-udm.github.io
+# @description 
+# # # #
+
+#%%
+import os
+import importlib
+import time
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.init as init
+import torch.nn.functional as F
+from torch.autograd import Variable
+import torchvision
+import torchvision.transforms
+import torch.utils.data.sampler as sampler
+import matplotlib.pyplot as plt
+
+path="/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/projet/"
+if os.path.isdir(path):
+    os.chdir(path)
+else:
+    os.chdir("./")
+print(os.getcwd())
+
+import  exp1
+importlib.reload(exp1)
+
+
+'''
+Set hyper-parameters
+'''
+TRAIN_EPOCH = 30 #10000
+BATCH_SIZE = 128
+LR0_MIN = 0.0001
+LR0_MAX = 0.0001
+GAMMA = 0.01 #0.04
+#number of adversarial iterations
+T_ADV = 15
+NO_CLASSES = 10
+TRAIN_DATA_SIZE = 50000
+# size of embedding layer
+EMBEDDING_SIZE = 512
+
+use_cuda = torch.cuda.is_available()
+exp1.init_seed()
+
+'''
+Load MNIST data
+'''
+mnist_transforms = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
+mnist_train = torchvision.datasets.MNIST(root='./data', train=True, transform=mnist_transforms, download=True)
+mnist_test = torchvision.datasets.MNIST(root='./data', train=False, transform=mnist_transforms, download=True)
+indices = list(range(len(mnist_train)))
+np.random.shuffle(indices)
+train_idx, valid_idx = indices[:TRAIN_DATA_SIZE], indices[TRAIN_DATA_SIZE:]
+train_sampler = sampler.SubsetRandomSampler(train_idx)
+valid_sampler = sampler.SubsetRandomSampler(valid_idx)
+train_data_loader = torch.utils.data.DataLoader(
+    mnist_train, batch_size=BATCH_SIZE, sampler=train_sampler, num_workers=10)
+valid_data_loader = torch.utils.data.DataLoader(
+    mnist_train, batch_size=BATCH_SIZE,  sampler=valid_sampler, num_workers=10)
+test_data_loader = torch.utils.data.DataLoader(mnist_test, batch_size=BATCH_SIZE, shuffle=True, num_workers=10)
+
+
+#%%
+'''
+Arichitectur of estimateur for MNIST
+'''
+class Mnist_Estimateur(nn.Module):
+    # initializers, d=num_filters
+    def __init__(self, d=32, activation='relu'):
+        super(Mnist_Estimateur, self).__init__()
+        # in_channels, out_channels, kernel_size, stride, padding, dilation
+        self.conv1 = nn.Conv2d(1, d, 8, 1, 0) # (28-8)+1 = 21
+        self.conv2 = nn.Conv2d(d, d*2, 6, 1, 0) # (21-6)+1= 16
+        self.conv3 = nn.Conv2d(d*2, d*4, 5, 1, 0) # (16-5)+1= 12
+        self.fc1 = nn.Linear(18432,1024)
+        self.fc2 = nn.Linear(1024,NO_CLASSES)
+        if activation == 'relu':
+            self.active = nn.ReLU() 
+        else :
+            self.active = nn.ELU()
+
+    def init_weights(self, mean, std):
+        for m in self._modules:
+            if type(m) == nn.Linear:
+                nn.init.xavier_uniform(m.weight)
+            if isinstance(m, nn.ConvTranspose2d) or isinstance(m, nn.Conv2d):
+                m.weight.data.normal_(mean, std)
+                m.bias.data.zero_()
+
+
+    def forward(self, input): 
+        x = self.active(self.conv1(input))
+        x = self.active(self.conv2(x))
+        x = self.active( self.conv3(x) )
+        x = x.view(x.size(0), -1)
+        x = self.active(self.fc1(x))
+        x = self.fc2(x)
+
+        return x
+
+#%%
+if __name__=='__main__':
+
+    loss_function=nn.CrossEntropyLoss()
+
+    mnist_WRM=Mnist_Estimateur(activation='elu')
+    mnist_WRM.init_weights(mean=0.0, std=0.02)
+    # optimizer = optim.Adam(mnist_WRM.parameters(), lr=LR0_MIN, betas=(0.5, 0.999))
+    # optimizer = optim.RMSprop(mnist_WRM.parameters(), lr=LR0_MIN)
+    optimizer = torch.optim.Adam(mnist_WRM.parameters(), lr=LR0_MIN)
+    exp1.train_WRM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
+        TRAIN_EPOCH , max_lr0=LR0_MAX,min_lr0=LR0_MIN,min_lr_adjust=False)

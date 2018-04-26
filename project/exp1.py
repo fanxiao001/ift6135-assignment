@@ -5,7 +5,7 @@ Created on Mon Apr 23 17:00:00 2018
 
 @author: fanxiao
 """
-
+#%%
 import os
 import time
 import matplotlib.pyplot as plt
@@ -96,7 +96,7 @@ def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,lr_
             losses.append(loss.data[0])
             loss.backward()
             optimizer.step()
-        print ('Epoch %d, loss %f, accuracy %.2f%%, accuracy adversarial %.2f%%'%(ep, torch.mean(torch.FloatTensor(losses))
+        print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
         ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
         
         if lr_adjust == True:
@@ -118,7 +118,7 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
             x_adversarial = x_.clone()
             
             #L_infinity x_adv = x+epsilon*sign(grad_x)
-#            x_adversarial.data = x_.data + epsilon * torch.sign(x_grad.data) 
+            # x_adversarial.data = x_.data + epsilon * torch.sign(x_grad.data) 
             
             #L2 x_adv = x + epsilon * (grad_x/||grad_x||)
             x_adversarial.data = x_.data + epsilon * x_grad.data/torch.norm(x_grad.data)
@@ -129,13 +129,13 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
             loss_adversarial.backward(half)
             losses.append((loss_true.data[0]+loss_adversarial.data[0])/2.0)
             optimizer.step()
-        print ('Epoch %d, loss %f, accuracy %.2f%%, accuracy adversarial %.2f%%'%(ep, torch.mean(torch.FloatTensor(losses))
+        print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
         ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
         
         if lr_adjust == True:
             adjust_lr_zt(optimizer,LR0,ep+1)
             
-def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoch,gamma=2,lr_adjust=False) :
+def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoch,gamma=2,max_lr0=0.0001,min_lr0=0.001,min_lr_adjust=False) :
     T_adv = 15
 #    half = torch.FloatTensor([0.5])
     for ep in range(num_epoch) :
@@ -152,13 +152,13 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             
             #running the maximizer for z_hat
 #            params = list(model.parameters()) + [z_hat]
-            optimizer_zt = torch.optim.Adam([z_hat], lr=0.01)
+            optimizer_zt = torch.optim.Adam([z_hat], lr=max_lr0)
             for n in range(T_adv) :
                 optimizer_zt.zero_grad()
-                loss_zt = - (loss_function(model(z_hat),y_) - gamma*(torch.norm(z_hat-x_)**2))
+                loss_zt = - ( loss_function(model(z_hat),y_)- gamma*(torch.norm(z_hat-x_)**2))
                 loss_zt.backward()
                 optimizer_zt.step()
-                adjust_lr_zt(optimizer_zt,0.01, n+1)
+                # adjust_lr_zt(optimizer_zt,max_lr0, n+1)
                 
             # running the loss minimizer, using z_hat   
             optimizer.zero_grad()
@@ -168,11 +168,11 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             losses.append(loss_adversarial.data[0])
             
             optimizer.step()
-        print ('Epoch %d, loss %f, accuracy %.2f%%, accuracy adversarial %.2f%%'%(ep, torch.mean(torch.FloatTensor(losses))
-        ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
+        print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
+            ,evaluate(model,valid_loader), evaluate_adversarial(model,valid_loader)))
         
-        if lr_adjust == True:
-            adjust_lr_zt(optimizer,LR0,ep+1) 
+        if min_lr_adjust == True:
+            adjust_lr_zt(optimizer,min_lr0,ep+1) 
 
 def synthetic_data(N_example) : 
     data_x = np.zeros((N_example,2))
@@ -181,8 +181,10 @@ def synthetic_data(N_example) :
     while(length<N_example) :
         x = np.random.randn(100,2)
         l2 = np.linalg.norm(x, axis=1)
-        x = x[np.any((l2>=1.3*np.sqrt(2),l2<=np.sqrt(2)/1.3), axis=0), :]
-        y = [1 if (np.linalg.norm(i) - np.sqrt(2)) > 0 else 0 for i in x]  
+        x = x[np.any((l2>=1.35*np.sqrt(2),l2<=np.sqrt(2)*0.85), axis=0), :]
+        y = [1 if (np.linalg.norm(i) - np.sqrt(2)*1.0) > 0 else 0 for i in x]  
+        # x = x[np.any((l2>=1.3*np.sqrt(2),l2<=np.sqrt(2)/1.3), axis=0), :]
+        # y = [1 if (np.linalg.norm(i) - np.sqrt(2)) > 0 else 0 for i in x]  
         if length+len(x) <= N_example :
             data_x[length:length+len(x),:] = x
             data_y[length:length+len(x)] = y
@@ -190,7 +192,10 @@ def synthetic_data(N_example) :
             data_x[length:,:] = x[N_example-length,:]
             data_y[length:] = y[N_example-length]
         length += len(x)
+    # print('num of class0:',len(data_y[data_y==0]))
     return data_x, data_y
+
+#%%
 
 def plotGraph(models,data_x, data_y) :
     
@@ -226,6 +231,9 @@ def init_seed(seed=123):
     np.random.seed(seed)
     torch.manual_seed(seed)
     random.seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
 #%%
 init_seed()
 train_x, train_y = synthetic_data(10000)
@@ -233,43 +241,47 @@ valid_x, valid_y = synthetic_data(4000)
 
 #%%
 
-LR0 = 0.01
-batch_size = 128
-loss_function = nn.CrossEntropyLoss()
+if __name__=='__main__':
+        
+    LR0 = 0.01
+    batch_size = 128
+    loss_function = nn.CrossEntropyLoss()
 
-train_data = torch.utils.data.TensorDataset(
-        torch.from_numpy(train_x).float(), torch.from_numpy(train_y).long())
-valid_data = torch.utils.data.TensorDataset(
-        torch.from_numpy(valid_x).float(), torch.from_numpy(valid_y).long())
-train_data_loader = torch.utils.data.DataLoader(
-                train_data, batch_size=batch_size, shuffle=True, num_workers=2)
-valid_data_loader = torch.utils.data.DataLoader(
-                valid_data, batch_size=batch_size, shuffle=True, num_workers=2)
+    train_data = torch.utils.data.TensorDataset(
+            torch.from_numpy(train_x).float(), torch.from_numpy(train_y).long())
+    valid_data = torch.utils.data.TensorDataset(
+            torch.from_numpy(valid_x).float(), torch.from_numpy(valid_y).long())
+    train_data_loader = torch.utils.data.DataLoader(
+                    train_data, batch_size=batch_size, shuffle=True, num_workers=2)
+    valid_data_loader = torch.utils.data.DataLoader(
+                    valid_data, batch_size=batch_size, shuffle=True, num_workers=2)
 
 
-#%%
-LR0 = 0.01
-net_ERM = MLP()
-net_ERM.init_weights_glorot()
-optimizer = torch.optim.Adam(net_ERM.parameters(), lr=LR0)
-train(net_ERM,optimizer,loss_function, train_data_loader,valid_data_loader,30, lr_adjust=False)
+    #%%
+    LR0 = 0.01
+    net_ERM = MLP()
+    net_ERM.init_weights_glorot()
+    optimizer = torch.optim.Adam(net_ERM.parameters(), lr=LR0)
+    train(net_ERM,optimizer,loss_function, train_data_loader,valid_data_loader,30, lr_adjust=False)
 
-#%%
-LR0 = 0.01
-net_FGM = MLP()
-net_FGM.init_weights_glorot()
+    #%%
+    LR0 = 0.01
+    net_FGM = MLP()
+    net_FGM.init_weights_glorot()
 
-optimizer = torch.optim.Adam(net_FGM.parameters(), lr=LR0)
-train_FGM(net_FGM,optimizer,loss_function, train_data_loader,valid_data_loader, 30, epsilon=0.3, lr_adjust=False)
+    optimizer = torch.optim.Adam(net_FGM.parameters(), lr=LR0)
+    train_FGM(net_FGM,optimizer,loss_function, train_data_loader,valid_data_loader, 30, epsilon=0.3, lr_adjust=False)
 
-#%%
-LR0 = 0.01
-net_WRM = MLP()
-net_WRM.init_weights_glorot()
+    #%%
+    LR0 = 0.01
+    net_WRM = MLP(activation='elu')
+    # net_WRM = MLP()
+    net_WRM.init_weights_glorot()
 
-optimizer = torch.optim.Adam(net_WRM.parameters(), lr=LR0)
-train_WRM(net_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, 30 , lr_adjust=False)
+    optimizer = torch.optim.Adam(net_WRM.parameters(), lr=LR0)
+    train_WRM(net_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, 30 , max_lr0=0.001,min_lr0=LR0,min_lr_adjust=False)
 
-#%%
+    #%%
 
-plotGraph([net_ERM,net_FGM,net_WRM],train_x, train_y)
+    plotGraph([net_WRM],train_x, train_y)
+    # plotGraph([net_ERM,net_FGM,net_WRM],train_x, train_y)
