@@ -180,7 +180,10 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             for n in range(T_adv) :
                 optimizer_zt.zero_grad()
                 # loss_zt = - ( loss_function(model(z_hat),y_)- gamma*(torch.norm(z_hat-x_)**2) )
-                loss_zt = - ( loss_function(model(z_hat),y_)- torch.mean(gamma*(torch.norm(z_hat-x_,2,1)**2)) )
+                if USE_CUDA :
+                    loss_zt = - ( loss_function(model(z_hat),y_)- torch.mean(gamma*(torch.norm(z_hat.cpu()-x_.cpu(),2,1)**2)).cuda() )
+                else :
+                    loss_zt = - ( loss_function(model(z_hat),y_)- torch.mean(gamma*(torch.norm(z_hat-x_,2,1)**2)) )
                 loss_zt.backward()
                 optimizer_zt.step()
                 # adjust_lr_zt(optimizer_zt,max_lr0, n+1)
