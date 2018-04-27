@@ -67,7 +67,7 @@ def evaluate (model, valid_data) :
         out = model(x_)
         _, predicted = torch.max(out, 1)
         COUNTER += y_.size(0)
-        ACCURACY += float(torch.eq(predicted,y_).sum().data.numpy())
+        ACCURACY += float(torch.eq(predicted,y_).sum().cpu().data.numpy())
     return ACCURACY / float(COUNTER) *100.0
 
 # evaluate on adversarial examples
@@ -90,7 +90,7 @@ def evaluate_adversarial (model, loss_function, valid_data, epsilon=0.5) :
         out = model(x_adversarial)
         _, predicted = torch.max(out, 1)
         COUNTER += y_.size(0)
-        ACCURACY += float(torch.eq(predicted,y_).sum().data.numpy())
+        ACCURACY += float(torch.eq(predicted,y_).sum().cpu().data.numpy())
     return ACCURACY / float(COUNTER) *100.0
 
 #basic training minimizing ERM          

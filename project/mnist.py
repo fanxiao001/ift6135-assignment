@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Thu Apr 26 2018 18:44:34 GMT-0400 (EDT)
+# @last-modified Thu Apr 26 2018 22:50:05 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -41,7 +41,14 @@ exp1.init_seed()
 
 NO_CLASSES = 10
 TRAIN_DATA_SIZE = 50000
+TRAIN_EPOCH = 50 #10000
+BATCH_SIZE = 128
 
+MIN_LR0 = 0.001
+MAX_LR0 = 0.001
+GAMMA = 0.1 #0.01 #0.04 #0.01
+#number of adversarial iterations
+T_ADV = 15
 
 '''
 Load MNIST data
@@ -102,13 +109,6 @@ class Mnist_Estimateur(nn.Module):
 #%%
 if __name__=='__main__':
 
-    TRAIN_EPOCH = 30 #10000
-    BATCH_SIZE = 128
-    MIN_LR0 = 0.001
-    MAX_LR0 = 0.001
-    GAMMA = 0.1 #0.01 #0.04 #0.01
-    #number of adversarial iterations
-    T_ADV = 15
     loss_function=nn.CrossEntropyLoss()
 
     mnist_WRM=Mnist_Estimateur(activation='elu')
