@@ -254,8 +254,6 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             losses_maxItr.append(loss_zt.data[0]) #loss in max iteration phi(theta,z)
             
             optimizer.step()
-
-            losses.append(loss_adversarial.data[0])
             
         if min_lr_adjust == True:
             adjust_lr(optimizer,min_lr0,ep,num_epoch) 
