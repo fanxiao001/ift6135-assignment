@@ -117,6 +117,7 @@ def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min
             optimizer.step()
             
             losses.append(loss.data[0])
+        
         # display and save
         mean_loss=torch.mean(torch.FloatTensor(losses))
         acc=evaluate(model,valid_loader)
@@ -139,7 +140,6 @@ def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min
         if min_lr_adjust == True:
             adjust_lr(optimizer,min_lr0,ep,num_epoch)
 
-            
             
 # one-step adversarial training using fast gradient L2
 def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epoch, epsilon,min_lr0=0.001,min_lr_adjust=False, savepath=None) :
@@ -194,15 +194,15 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
         train_hist['ptime'].append(per_epoch_ptime)
         print ('epoch %d , loss %.3f , acc %.2f%% , acc adv %.2f%% , ptime %.2fs .' \
             %(ep, mean_loss, acc, acc_adv, per_epoch_ptime))
+
+        if min_lr_adjust == True:
+            adjust_lr(optimizer,min_lr0,ep,num_epoch)
     
         if savepath is not None and (ep % 3==0):
             end_time = time.time()
             total_ptime = end_time - start_time
             train_hist['total_ptime'].append(total_ptime)
             saveCheckpoint(model,train_hist,savepath+'_ep'+str(ep))
-            
-        if min_lr_adjust == True:
-            adjust_lr(optimizer,min_lr0,ep,num_epoch)
         
             
 def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoch,gamma=2,max_lr0=0.0001,min_lr0=0.001,min_lr_adjust=False,savepath=None) :
@@ -220,6 +220,7 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
         epoch_start_time = time.time()
         losses = []
         losses_maxItr =[]
+        rhos = []
         for x_, y_ in train_loader :
             if USE_CUDA:
                 x_, y_ = x_.cuda(), y_.cuda()
@@ -234,13 +235,16 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             #running the maximizer for z_hat
             optimizer_zt = torch.optim.Adam([z_hat], lr=max_lr0)
             loss_zt = 0 # phi(theta,z0)
+            rho = 0 #E[c(Z,Z0)]
             for n in range(T_adv) :
                 optimizer_zt.zero_grad()
                 # loss_zt = - ( loss_function(model(z_hat),y_)- gamma*(torch.norm(z_hat-x_)**2) )
                 if USE_CUDA :
-                    loss_zt = - ( loss_function(model(z_hat),y_)- torch.mean(gamma*(torch.norm(z_hat.cpu()-x_.cpu(),2,1)**2)).cuda() )
+                    rho = torch.mean((torch.norm(z_hat.cpu()-x_.cpu(),2,1)**2)).cuda() 
+                    loss_zt = - ( loss_function(model(z_hat),y_)- gamma * rho)
                 else :
-                    loss_zt = - ( loss_function(model(z_hat),y_)- torch.mean(gamma*(torch.norm(z_hat-x_,2,1)**2)) )
+                    rho = torch.mean((torch.norm(z_hat-x_,2,1)**2))
+                    loss_zt = - ( loss_function(model(z_hat),y_)-  gamma * rho)
                 loss_zt.backward()
                 optimizer_zt.step()
                 adjust_lr_zt(optimizer_zt,max_lr0, n+1)
@@ -249,18 +253,20 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             optimizer.zero_grad()
             loss_adversarial = loss_function(model(z_hat),y_)
             
-            loss_adversarial.backward()
+            loss_adversarial.backward()         
+            optimizer.step()
+            
             losses.append(loss_adversarial.data[0])
             losses_maxItr.append(loss_zt.data[0]) #loss in max iteration phi(theta,z)
-            
-            optimizer.step()
+            rhos.append(rho.data[0])
             
         if min_lr_adjust == True:
             adjust_lr(optimizer,min_lr0,ep,num_epoch) 
 
         # display and save
-        mean_loss=torch.mean(torch.FloatTensor(losses))
-        mean_loss_maxItr=torch.mean(torch.FloatTensor(losses_maxItr))
+        mean_loss=torch.mean(torch.FloatTensor(losses)) # E(l(theta,z))
+        mean_loss_maxItr=torch.mean(torch.FloatTensor(losses_maxItr)) #E[phi(theta,z)]
+        mean_loss_rho = torch.mean(torch.FloatTensor(rhos)) #E[c(Z,Z0)]
         acc=evaluate(model,valid_loader)
         acc_adv=evaluate_adversarial(model,loss_function,valid_loader)
         epoch_end_time = time.time()
@@ -270,8 +276,8 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
         train_hist['acc'].append(acc)
         train_hist['acc_adv'].append(acc_adv)
         train_hist['ptime'].append(per_epoch_ptime)
-        print ('epoch %d , loss %.3f , acc %.2f%% , acc adv %.2f%% , ptime %.2fs .' \
-            %(ep, mean_loss, acc, acc_adv, per_epoch_ptime))
+        print ('epoch %d , loss %.3f , acc %.2f%% , acc adv %.2f%% , rho %.3f, ptime %.2fs .' \
+            %(ep, mean_loss, acc, acc_adv, mean_loss_rho, per_epoch_ptime))
         
         # save
         if savepath is not None and (ep % 3==0):
@@ -482,7 +488,7 @@ if __name__=='__main__':
 
     optimizer = torch.optim.Adam(net_WRM.parameters(), lr=LR0)
     train_WRM(net_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, 30 ,GAMMA,  max_lr0=MAX_LR0, min_lr0=LR0, min_lr_adjust=False, savepath='syn_WRM')
-
+    # rho = 0.072, epsilon = sqrt(rho) = 0.2683281572999748
 #%%
 if __name__=='__main__':
     plotGraph([net_ERM,net_FGM,net_WRM],train_x, train_y)
