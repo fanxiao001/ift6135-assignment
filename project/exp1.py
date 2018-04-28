@@ -116,7 +116,7 @@ def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min
             loss.backward()
             optimizer.step()
             
-        losses.append(loss.data[0])
+            losses.append(loss.data[0])
         # display and save
         mean_loss=torch.mean(torch.FloatTensor(losses))
         acc=evaluate(model,valid_loader)
