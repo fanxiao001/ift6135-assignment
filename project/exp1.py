@@ -94,8 +94,11 @@ def evaluate_adversarial (model, loss_function, valid_data, epsilon=0.5) :
     return ACCURACY / float(COUNTER) *100.0
 
 #basic training minimizing ERM          
-def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min_lr0=0.001,min_lr_adjust=False) :
-    for ep in range(num_epoch) :
+def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min_lr0=0.001,min_lr_adjust=False,savepath=None) :
+    start_time = time.time()
+    train_hist={}
+    for ep in range(1,num_epoch+1) :
+        epoch_start_time = time.time()
         losses = []
         for x_, y_ in train_loader :
             if USE_CUDA:
@@ -103,21 +106,36 @@ def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min
             x_, y_ = Variable(x_), Variable(y_)
             optimizer.zero_grad()
             loss = loss_function(model(x_),y_)
-            losses.append(loss.data[0])
             loss.backward()
             optimizer.step()
 
-        # print ('%d epoch, %.3f loss, %.2f%% accuracy.'%(ep, torch.mean(torch.FloatTensor(losses))
-        #     ,evaluate(model,valid_loader)))
-        print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
-            ,evaluate(model,valid_loader), evaluate_adversarial(model,loss_function,valid_loader)))
-        
+            losses.append(loss.data[0])
+
         if min_lr_adjust == True:
-            adjust_lr(optimizer,min_lr0,ep+1,num_epoch)
+            adjust_lr(optimizer,min_lr0,ep,num_epoch)
+
+        mean_loss=torch.mean(torch.FloatTensor(losses))
+        acc=evaluate(model,valid_loader)
+        acc_adv=evaluate_adversarial(model,loss_function,valid_loader)
+        epoch_end_time = time.time()
+        per_epoch_ptime = epoch_end_time - epoch_start_time
+        print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial, %.2fs ptime.' \
+            %(ep, mean_loss ,acc, acc_adv,per_epoch_ptime ))
+        
+        # save
+        if savepath is not None and (ep % 3==0):
+            end_time = time.time()
+            total_ptime = end_time - start_time
+            # train_hist['total_ptime'].append(total_ptime)
+            saveCheckpoint(model,train_hist,savepath+'_ep'+str(ep))
+            
             
 # one-step adversarial training using fast gradient L2
-def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epoch, epsilon,min_lr0=0.001,min_lr_adjust=False) :
-    for ep in range(num_epoch) :
+def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epoch, epsilon,min_lr0=0.001,min_lr_adjust=False,savepath=None) :
+    start_time = time.time()
+    train_hist={}
+    for ep in range(1,num_epoch+1) :
+        epoch_start_time = time.time()
         losses = []
         half = torch.FloatTensor([0.5])
         for x_, y_ in train_loader :
@@ -146,11 +164,25 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
             optimizer.step()
 
             losses.append((loss_true.data[0]+loss_adversarial.data[0])/2.0)
-        print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial.'%(ep, torch.mean(torch.FloatTensor(losses))
-            ,evaluate(model,valid_loader), evaluate_adversarial(model,loss_function,valid_loader)))
-        
+
         if min_lr_adjust == True:
-            adjust_lr(optimizer,min_lr0,ep+1,num_epoch)
+            adjust_lr(optimizer,min_lr0,ep,num_epoch)
+
+        mean_loss=torch.mean(torch.FloatTensor(losses))
+        acc=evaluate(model,valid_loader)
+        acc_adv=evaluate_adversarial(model,loss_function,valid_loader)
+        epoch_end_time = time.time()
+        per_epoch_ptime = epoch_end_time - epoch_start_time
+        print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial, %.2fs ptime.' \
+            %(ep, mean_loss ,acc, acc_adv,per_epoch_ptime ))
+        
+        # save
+        if savepath is not None and (ep % 3==0):
+            end_time = time.time()
+            total_ptime = end_time - start_time
+            # train_hist['total_ptime'].append(total_ptime)
+            saveCheckpoint(model,train_hist,savepath+'_ep'+str(ep))
+        
             
 def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoch,gamma=2,max_lr0=0.0001,min_lr0=0.001,min_lr_adjust=False,savepath=None) :
     T_adv = 15
@@ -193,10 +225,10 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             loss_adversarial = loss_function(model(z_hat),y_)
             
             loss_adversarial.backward()
-            losses.append(loss_adversarial.data[0])
-            
             optimizer.step()
 
+            losses.append(loss_adversarial.data[0])
+            
         if min_lr_adjust == True:
             adjust_lr(optimizer,min_lr0,ep,num_epoch) 
 
@@ -209,6 +241,7 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
         print ('%d epoch, %.3f loss, %.2f%% accuracy, %.2f%% accuracy adversarial, %.2fs ptime.' \
             %(ep, mean_loss, acc, acc_adv, per_epoch_ptime))
         
+        # save
         if savepath is not None and (ep % 3==0):
             end_time = time.time()
             total_ptime = end_time - start_time
@@ -329,7 +362,7 @@ if __name__=='__main__':
     net_ERM = MLP()
     net_ERM.init_weights_glorot()
     optimizer = torch.optim.Adam(net_ERM.parameters(), lr=LR0)
-    # train(net_ERM,optimizer,loss_function, train_data_loader,valid_data_loader,30,min_lr0=LR0,min_lr_adjust=False)
+    train(net_ERM,optimizer,loss_function, train_data_loader,valid_data_loader,30,min_lr0=LR0,min_lr_adjust=False)
 
     #%%
     LR0 = 0.01
@@ -337,7 +370,7 @@ if __name__=='__main__':
     net_FGM.init_weights_glorot()
 
     optimizer = torch.optim.Adam(net_FGM.parameters(), lr=LR0)
-    # train_FGM(net_FGM,optimizer,loss_function, train_data_loader,valid_data_loader, 30, epsilon=0.3,min_lr0=LR0,min_lr_adjust=False)
+    train_FGM(net_FGM,optimizer,loss_function, train_data_loader,valid_data_loader, 30, epsilon=0.3,min_lr0=LR0,min_lr_adjust=False)
 
     #%%
     LR0 = 0.01
@@ -347,7 +380,7 @@ if __name__=='__main__':
     net_WRM.init_weights_glorot()
 
     optimizer = torch.optim.Adam(net_WRM.parameters(), lr=LR0)
-    train_WRM(net_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, 30 , max_lr0=MAX_LR0, min_lr0=LR0, min_lr_adjust=False)
+    train_WRM(net_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, 30 , gamma=2, max_lr0=MAX_LR0, min_lr0=LR0, min_lr_adjust=False)
 
 #%%
 if __name__=='__main__':
