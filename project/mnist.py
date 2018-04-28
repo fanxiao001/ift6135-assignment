@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Thu Apr 26 2018 22:50:05 GMT-0400 (EDT)
+# @last-modified Fri Apr 27 2018 09:02:12 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -66,7 +66,7 @@ train_data_loader = torch.utils.data.DataLoader(
 valid_data_loader = torch.utils.data.DataLoader(
     mnist_train, batch_size=BATCH_SIZE,  sampler=valid_sampler, num_workers=10)
 test_data_loader = torch.utils.data.DataLoader(mnist_test, batch_size=BATCH_SIZE, shuffle=True, num_workers=10)
-
+print('Loaded MNIST data, total',len(mnist_train)+len(mnist_test))
 
 #%%
 '''
@@ -128,7 +128,7 @@ if __name__=='__main__':
 #%%
 if __name__=='__main__':
 
-    filename='mnist_wrm_elu_ep30'
+    filename='mnist_wrm_elu_ep42'
     mnist_WRM,_=exp1.loadCheckpoint(mnist_WRM,filename)
 
     print('Accuracy on test data: ',exp1.evaluate(mnist_WRM,test_data_loader))
