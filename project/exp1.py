@@ -19,7 +19,7 @@ import torch.optim as optim
 import numpy as np
 import random
 
-USE_CUDA=torch.cuda.is_available()
+USE_CUDA =  torch.cuda.is_available()
 
 #%%
 
@@ -58,6 +58,7 @@ def adjust_lr_zt(optimizer, lr0, epoch):
         param_group['lr'] = lr
         
 def evaluate (model, valid_data) :
+    model.eval()
     COUNTER = 0
     ACCURACY = 0
     for x_, y_ in valid_data :
@@ -96,11 +97,12 @@ def evaluate_adversarial (model, loss_function, valid_data, epsilon=0.5) :
 #basic training minimizing ERM          
 
 def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min_lr0=0.001,min_lr_adjust=False, savepath=None) :
+    model.train()
     start_time = time.time()
     train_hist={}
     train_hist['loss']=[]
-    train_hist['acc']=[]
-    train_hist['acc_adv']=[]
+    train_hist['acc_train']=[]
+    train_hist['acc_test']=[]
     train_hist['ptime']=[]
     train_hist['total_ptime']=[]
 
@@ -120,16 +122,16 @@ def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min
         
         # display and save
         mean_loss=torch.mean(torch.FloatTensor(losses))
-        acc=evaluate(model,valid_loader)
-        acc_adv=evaluate_adversarial(model,loss_function,valid_loader)
+        acc_train = evaluate(model,train_loader)
+        acc_test = evaluate(model,valid_loader)
         epoch_end_time = time.time()
         per_epoch_ptime = epoch_end_time - epoch_start_time
         train_hist['loss'].append(mean_loss)
-        train_hist['acc'].append(acc)
-        train_hist['acc_adv'].append(acc_adv)
+        train_hist['acc_train'].append(acc_train)
+        train_hist['acc_test'].append(acc_test)
         train_hist['ptime'].append(per_epoch_ptime)
-        print ('epoch %d , loss %.3f , acc %.2f%% , acc adv %.2f%% , ptime %.2fs .' \
-            %(ep, mean_loss, acc, acc_adv, per_epoch_ptime))
+        print ('epoch %d , loss %.3f , acc train %.2f%% , acc test %.2f%% , ptime %.2fs .' \
+            %(ep, mean_loss, acc_train, acc_test, per_epoch_ptime))
         
         if savepath is not None and (ep % 3==0):
             end_time = time.time()
@@ -142,19 +144,22 @@ def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min
 
             
 # one-step adversarial training using fast gradient L2
-def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epoch, epsilon,min_lr0=0.001,min_lr_adjust=False, savepath=None) :
+def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epoch, epsilon, min_lr0=0.001,min_lr_adjust=False, savepath=None) :
+    model.train()
     start_time = time.time()
     train_hist={}
     train_hist['loss']=[]
-    train_hist['acc']=[]
-    train_hist['acc_adv']=[]
+    train_hist['acc_train']=[]
+    train_hist['acc_test']=[]
     train_hist['ptime']=[]
     train_hist['total_ptime']=[]
     
     for ep in range(1,num_epoch+1) :
         epoch_start_time = time.time()
         losses = []
-        half = torch.FloatTensor([0.5])
+        half = Variable(torch.FloatTensor([0.5]))
+        if USE_CUDA :
+            half = half.cuda()
         for x_, y_ in train_loader :
             if USE_CUDA:
                 x_, y_ = x_.cuda(), y_.cuda()
@@ -172,8 +177,8 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
             # x_adversarial.data = x_.data + epsilon * torch.sign(x_grad.data) 
             
             #L2 x_adv = x + epsilon * (grad_x/||grad_x||)
-            x_adversarial.data = x_.data + epsilon * x_grad.data/torch.norm(x_grad.data)
-            
+            x_adversarial.data = x_.data + epsilon * x_grad.data/torch.norm(x_grad.data.view(len(x_),-1),2,1).view(len(x_),1)
+                
             x_.grad.data.zero_()
             loss_adversarial = loss_function(model(x_adversarial),y_)
             
@@ -184,16 +189,16 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
             
         # display and save
         mean_loss=torch.mean(torch.FloatTensor(losses))
-        acc=evaluate(model,valid_loader)
-        acc_adv=evaluate_adversarial(model,loss_function,valid_loader)
+        acc_train = evaluate(model,train_loader)
+        acc_test = evaluate(model,valid_loader)
         epoch_end_time = time.time()
         per_epoch_ptime = epoch_end_time - epoch_start_time
         train_hist['loss'].append(mean_loss)
-        train_hist['acc'].append(acc)
-        train_hist['acc_adv'].append(acc_adv)
+        train_hist['acc_train'].append(acc_train)
+        train_hist['acc_test'].append(acc_test)
         train_hist['ptime'].append(per_epoch_ptime)
-        print ('epoch %d , loss %.3f , acc %.2f%% , acc adv %.2f%% , ptime %.2fs .' \
-            %(ep, mean_loss, acc, acc_adv, per_epoch_ptime))
+        print ('epoch %d , loss %.3f , acc train %.2f%% , acc test %.2f%% , ptime %.2fs .' \
+            %(ep, mean_loss, acc_train, acc_test, per_epoch_ptime))
 
         if min_lr_adjust == True:
             adjust_lr(optimizer,min_lr0,ep,num_epoch)
@@ -205,14 +210,15 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
             saveCheckpoint(model,train_hist,savepath+'_ep'+str(ep))
         
             
-def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoch,gamma=2,max_lr0=0.0001,min_lr0=0.001,min_lr_adjust=False,savepath=None) :
+def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoch,gamma=2,max_lr0=0.0001,min_lr0=0.001,min_lr_adjust=False, savepath=None) :
+    model.train()
     T_adv = 15
     start_time = time.time()
     train_hist={}
     train_hist['loss']=[]
     train_hist['loss_maxItr'] =[]
-    train_hist['acc']=[]
-    train_hist['acc_adv']=[]
+    train_hist['acc_train']=[]
+    train_hist['acc_test']=[]
     train_hist['ptime']=[]
     train_hist['total_ptime']=[]
 
@@ -238,13 +244,10 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
             rho = 0 #E[c(Z,Z0)]
             for n in range(T_adv) :
                 optimizer_zt.zero_grad()
-                # loss_zt = - ( loss_function(model(z_hat),y_)- gamma*(torch.norm(z_hat-x_)**2) )
-                if USE_CUDA :
-                    rho = torch.mean((torch.norm(z_hat.cpu()-x_.cpu(),2,1)**2)).cuda() 
-                    loss_zt = - ( loss_function(model(z_hat),y_)- gamma * rho)
-                else :
-                    rho = torch.mean((torch.norm(z_hat-x_,2,1)**2))
-                    loss_zt = - ( loss_function(model(z_hat),y_)-  gamma * rho)
+                delta = z_hat - x_
+                rho = torch.mean((torch.norm(delta.view(len(x_),-1),2,1)**2)) 
+#                rho = torch.mean((torch.norm(z_hat-x_,2,1)**2))
+                loss_zt = - ( loss_function(model(z_hat),y_)-  gamma * rho)
                 loss_zt.backward()
                 optimizer_zt.step()
                 adjust_lr_zt(optimizer_zt,max_lr0, n+1)
@@ -267,17 +270,17 @@ def train_WRM(model,optimizer,loss_function, train_loader,valid_loader, num_epoc
         mean_loss=torch.mean(torch.FloatTensor(losses)) # E(l(theta,z))
         mean_loss_maxItr=torch.mean(torch.FloatTensor(losses_maxItr)) #E[phi(theta,z)]
         mean_loss_rho = torch.mean(torch.FloatTensor(rhos)) #E[c(Z,Z0)]
-        acc=evaluate(model,valid_loader)
-        acc_adv=evaluate_adversarial(model,loss_function,valid_loader)
+        acc_train = evaluate(model,train_loader)
+        acc_test = evaluate(model,valid_loader)
         epoch_end_time = time.time()
         per_epoch_ptime = epoch_end_time - epoch_start_time
         train_hist['loss'].append(mean_loss)
         train_hist['loss_maxItr'].append(-mean_loss_maxItr) #negative since minimize -loss
-        train_hist['acc'].append(acc)
-        train_hist['acc_adv'].append(acc_adv)
+        train_hist['acc_train'].append(acc_train)
+        train_hist['acc_test'].append(acc_test)
         train_hist['ptime'].append(per_epoch_ptime)
-        print ('epoch %d , loss %.3f , acc %.2f%% , acc adv %.2f%% , rho %.3f, ptime %.2fs .' \
-            %(ep, mean_loss, acc, acc_adv, mean_loss_rho, per_epoch_ptime))
+        print ('epoch %d , loss %.3f , acc train %.2f%% , acc test %.2f%% , rho %.3f, ptime %.2fs .' \
+            %(ep, mean_loss, acc_train, acc_test, mean_loss_rho, per_epoch_ptime))
         
         # save
         if savepath is not None and (ep % 3==0):
@@ -334,7 +337,7 @@ def synthetic_data(N_example) :
 
 def plotGraph(models,data_x, data_y) :
     
-    plt.figure(figsize=(5,5))
+    fig = plt.figure(figsize=(5,5))
     Colors = ['blue','orange','red','purple','green']
     labels = ['ERM','FGM','WRM']
     
@@ -360,6 +363,7 @@ def plotGraph(models,data_x, data_y) :
     plt.xlim([-4,4])
     plt.ylim([-4,4])
     plt.legend()
+    return fig
 
 def init_seed(seed=123):
     '''set seed of random number generators'''
@@ -371,7 +375,7 @@ def init_seed(seed=123):
         
 # plot figure 2 certificate vs. worst case
 def plot_certificate(model,loss_train,gamma,valid_data_loader) :
-    plt.figure()
+    fig = plt.figure()
     certificate=[] #E_train[phi(theta,z)] + gamma*rho
     list_rho = []
     list_worst = []
@@ -382,9 +386,9 @@ def plot_certificate(model,loss_train,gamma,valid_data_loader) :
     #test worst case 
     list_rho = []
     list_worst = []
-    for g in range(90,230,2) :
+    for g in range(60,300,5) :
         g=g/100.0
-        rho, e = cal_worst_case(net_WRM,valid_data_loader, g, 0.11)
+        rho, e = cal_worst_case(model,valid_data_loader, g, 0.12)
         list_rho.append(rho)
         list_worst.append(e + rho * g)
     
@@ -394,11 +398,13 @@ def plot_certificate(model,loss_train,gamma,valid_data_loader) :
     plt.xlim([0,0.65])
     plt.ylim([0,1.3])
     plt.legend(loc="lower right")
+    return fig
 
-def cal_worst_case(model,valid_data_loader, gamma, max_lr0) :
+def cal_worst_case(model, valid_data_loader, gamma, max_lr0,d=1) :
     loss_maxItr = []
-    T_adv=30
+    T_adv=15
     rhos = []
+    loss_function = nn.CrossEntropyLoss()
     for x_, y_ in valid_data_loader :
         if USE_CUDA:
             x_, y_ = x_.cuda(), y_.cuda()
@@ -416,13 +422,10 @@ def cal_worst_case(model,valid_data_loader, gamma, max_lr0) :
         rho = 0
         for n in range(T_adv) :
             optimizer_zt.zero_grad()
-            # loss_zt = - ( loss_function(model(z_hat),y_)- gamma*(torch.norm(z_hat-x_)**2) )
-            if USE_CUDA :
-                rho = torch.mean((torch.norm(z_hat.cpu()-x_.cpu(),2,1)**2)).cuda()
-                loss_zt = - ( loss_function(model(z_hat),y_)- gamma*rho )
-            else :
-                rho = torch.mean(gamma*(torch.norm(z_hat-x_,2,1)**2)) 
-                loss_zt = - ( loss_function(model(z_hat),y_)- gamma * rho)
+            delta = z_hat - x_
+            rho = torch.mean((torch.norm(delta.view(len(x_),-1),2,1)**2)) 
+#            rho = torch.mean((torch.norm(z_hat-x_,2,1)**2))
+            loss_zt = - ( loss_function(model(z_hat),y_)- gamma * rho)
             loss_zt.backward()
             optimizer_zt.step()
             adjust_lr_zt(optimizer_zt,max_lr0, n+1)
@@ -460,7 +463,7 @@ if __name__=='__main__':
 if __name__=='__main__':
     #%%
     LR0 = 0.01
-    net_ERM = MLP()
+    net_ERM = MLP('relu')
     if USE_CUDA :
         net_ERM.cuda()
     net_ERM.init_weights_glorot()
@@ -469,13 +472,13 @@ if __name__=='__main__':
 
     #%%
     LR0 = 0.01
-    net_FGM = MLP()
+    net_FGM = MLP('relu')
     if USE_CUDA :
         net_FGM.cuda()
     net_FGM.init_weights_glorot()
 
     optimizer = torch.optim.Adam(net_FGM.parameters(), lr=LR0)
-    train_FGM(net_FGM,optimizer,loss_function, train_data_loader,valid_data_loader, 30, epsilon=0.3,min_lr0=LR0,min_lr_adjust=False)
+    train_FGM(net_FGM,optimizer,loss_function, train_data_loader,valid_data_loader, 30, epsilon=0.265, min_lr0=LR0,min_lr_adjust=False)
 
     #%%
     LR0 = 0.01
@@ -488,14 +491,34 @@ if __name__=='__main__':
 
     optimizer = torch.optim.Adam(net_WRM.parameters(), lr=LR0)
     train_WRM(net_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, 30 ,GAMMA,  max_lr0=MAX_LR0, min_lr0=LR0, min_lr_adjust=False, savepath='syn_WRM')
-    # rho = 0.072, epsilon = sqrt(rho) = 0.2683281572999748
+    # rho = 0.072, epsilon = sqrt(rho) = 0.2683281572999748 (RELU)
+    # rho = 0.070, epsilon = 0.265 (ELU)
 #%%
 if __name__=='__main__':
-    plotGraph([net_ERM,net_FGM,net_WRM],train_x, train_y)
+    fig = plotGraph([net_ERM,net_FGM,net_WRM],train_x, train_y)
+#    fig.savefig('fig1-relu.pdf')
 
 #%%
 if __name__=='__main__':
     model = MLP('relu')
     net_WRM, train_hist = loadCheckpoint(model,'syn_WRM_ep30')
-    plot_certificate(net_WRM,train_hist['loss_maxItr'][-1],GAMMA,valid_data_loader)
-
+    fig = plot_certificate(net_WRM,train_hist['loss_maxItr'][-1],GAMMA,valid_data_loader)
+    fig.savefig('fig2-syn.pdf')
+#%%
+#certificate=[] #E_train[phi(theta,z)] + gamma*rho
+#list_rho = []
+#list_worst = []
+#for rho in range(0,65,5):
+#    rho = rho/100.0
+#    certificate.append(train_hist['loss_maxItr'][-1]+2.0*rho)
+#
+#for g in range(60,300,5) :
+#    g=g/100.0
+#    rho, e = cal_worst_case(net_WRM,valid_data_loader, g, 0.12)
+#    print (rho, e+rho*g)
+#    list_rho.append(rho)
+#    list_worst.append(e + rho * g)
+#
+#plt.plot(list_rho,list_worst, c='red', label=r"Test worst-case: $\sup_{P:W_c(P,\hat{P}_{test}) \leq \rho } E_P [l(\theta_{WRM};Z)]$")
+#plt.plot(np.array(range(0,65,5))/100.0,certificate,c='blue', label=r"Certificate: $E_{\hat{P}_n}[\phi_{\gamma}(\theta_{WRM};Z)]+\gamma \rho$")
+#    
