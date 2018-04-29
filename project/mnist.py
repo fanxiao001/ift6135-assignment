@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Fri Apr 27 2018 09:02:12 GMT-0400 (EDT)
+# @last-modified Sun Apr 29 2018 02:26:24 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -46,7 +46,7 @@ BATCH_SIZE = 128
 
 MIN_LR0 = 0.001
 MAX_LR0 = 0.001
-GAMMA = 0.1 #0.01 #0.04 #0.01
+GAMMA = 0.04 #0.01 #0.04 #0.01
 #number of adversarial iterations
 T_ADV = 15
 
@@ -67,6 +67,8 @@ valid_data_loader = torch.utils.data.DataLoader(
     mnist_train, batch_size=BATCH_SIZE,  sampler=valid_sampler, num_workers=10)
 test_data_loader = torch.utils.data.DataLoader(mnist_test, batch_size=BATCH_SIZE, shuffle=True, num_workers=10)
 print('Loaded MNIST data, total',len(mnist_train)+len(mnist_test))
+
+#? norm x?
 
 #%%
 '''
