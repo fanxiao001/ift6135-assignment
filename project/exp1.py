@@ -19,7 +19,7 @@ import torch.optim as optim
 import numpy as np
 import random
 
-USE_CUDA =  torch.cuda.is_available()
+USE_CUDA = torch.cuda.is_available()
 
 #%%
 
@@ -415,11 +415,10 @@ def synthetic_data(N_example) :
 
 #%%
 
-def plotGraph(models,data_x, data_y) :
+def plotGraph(models,data_x, data_y, labels) :
     
-    plt.figure(figsize=(5,5))
+    fig = plt.figure(figsize=(5,5))
     Colors = ['blue','orange','red','purple','green','grey']
-    labels = ['ERM','FGM','WRM','IFGM']
 
     plt.scatter(data_x[data_y==0,0],data_x[data_y==0,1], c=Colors[0], marker='.')
     plt.scatter(data_x[data_y==1,0],data_x[data_y==1,1], facecolors='none', edgecolors=Colors[1])
@@ -542,7 +541,7 @@ if __name__=='__main__':
 if __name__=='__main__':
     
     LR0 = 0.01
-    net_ERM = MLP('relu')
+    net_ERM = MLP('elu')
     if USE_CUDA :
         net_ERM.cuda()
     net_ERM.init_weights_glorot()
@@ -551,7 +550,7 @@ if __name__=='__main__':
 
     LR0 = 0.01
     EPSILON=0.265 #0.03 #0.3
-    net_FGM = MLP('relu')
+    net_FGM = MLP('elu')
     if USE_CUDA :
         net_FGM.cuda()
     net_FGM.init_weights_glorot()
@@ -559,10 +558,11 @@ if __name__=='__main__':
     optimizer = torch.optim.Adam(net_FGM.parameters(), lr=LR0)
     train_FGM(net_FGM,optimizer,loss_function, train_data_loader,valid_data_loader, 30, epsilon=EPSILON, min_lr0=LR0,min_lr_adjust=False)
 
+
     LR0 = 0.01
     MAX_LR0=0.08
     GAMMA=2
-    net_WRM = MLP(activation='relu')
+    net_WRM = MLP(activation='elu')
     if USE_CUDA :
         net_WRM.cuda()
     net_WRM.init_weights_glorot()
@@ -571,9 +571,9 @@ if __name__=='__main__':
     train_WRM(net_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, 30 ,GAMMA,  max_lr0=MAX_LR0, min_lr0=LR0, min_lr_adjust=False, savepath='syn_WRM')
     # rho = 0.072, epsilon = sqrt(rho) = 0.2683281572999748 (RELU)
     # rho = 0.070, epsilon = 0.265 (ELU)
-    
+#%%    
     LR0 = 0.01
-    EPSILON=0.02 #0.03 #0.3
+    EPSILON=0.03 #0.03 #0.3
     net_IFGM = MLP(activation='relu')
     if USE_CUDA :
         net_IFGM.cuda()
@@ -585,16 +585,17 @@ if __name__=='__main__':
 if __name__=='__main__':
     # net_temp = MLP(activation='relu')
     # plotGraph([net_temp,net_temp,net_temp,net_IFGM],train_x, train_y)
-    fig = plotGraph([net_ERM,net_FGM,net_WRM,net_IFGM],train_x, train_y)
+    labels = ['ERM','FGM','WRM','IFGM']
+    fig = plotGraph([net_ERM,net_FGM,net_WRM,net_IFGM],train_x, train_y, labels)
 #    fig.savefig('fig1-relu.pdf')
 
 #%%
 if __name__=='__main__':
-    model = MLP('relu')
+    model = MLP('elu')
     net_WRM, train_hist = loadCheckpoint(model,'syn_WRM_ep30')
     fig = plot_certificate(net_WRM,train_hist['loss_maxItr'][-1],GAMMA,valid_data_loader)
     fig.legend()
-    fig.savefig('fig2-syn.pdf')
+#    fig.savefig('fig2-syn.pdf')
 #%%
 #certificate=[] #E_train[phi(theta,z)] + gamma*rho
 #list_rho = []
@@ -603,9 +604,9 @@ if __name__=='__main__':
 #    rho = rho/100.0
 #    certificate.append(train_hist['loss_maxItr'][-1]+2.0*rho)
 #
-#for g in range(60,300,5) :
+#for g in range(120,300,5) :
 #    g=g/100.0
-#    rho, e = cal_worst_case(net_WRM,valid_data_loader, g, 0.12)
+#    rho, e = cal_worst_case(net_WRM,valid_data_loader, g, 0.05)
 #    print (rho, e+rho*g)
 #    list_rho.append(rho)
 #    list_worst.append(e + rho * g)

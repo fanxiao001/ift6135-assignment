@@ -25,8 +25,10 @@ import torchvision
 import torchvision.transforms
 import torch.utils.data.sampler as sampler
 import matplotlib.pyplot as plt
+from torch.autograd.gradcheck import zero_gradients
 
-path="/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/projet/"
+#path="/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/projet/"
+path = "C:\\Users\\lingyu.yue\\Documents\\Xiao_Fan\\project"
 if os.path.isdir(path):
     os.chdir(path)
 else:
@@ -41,14 +43,9 @@ exp1.init_seed()
 
 NO_CLASSES = 10
 TRAIN_DATA_SIZE = 50000
-TRAIN_EPOCH = 50 #10000
+TRAIN_EPOCH = 30#10000
 BATCH_SIZE = 128
 
-MIN_LR0 = 0.001
-MAX_LR0 = 0.001
-GAMMA = 0.04 #0.01 #0.04 #0.01
-#number of adversarial iterations
-T_ADV = 15
 
 '''
 Load MNIST data
@@ -68,26 +65,69 @@ valid_data_loader = torch.utils.data.DataLoader(
 test_data_loader = torch.utils.data.DataLoader(mnist_test, batch_size=BATCH_SIZE, shuffle=True, num_workers=10)
 print('Loaded MNIST data, total',len(mnist_train)+len(mnist_test))
 
-#? norm x?
-
 #%%
 '''
 Arichitectur of estimateur for MNIST
 '''
+#class Mnist_Estimateur(nn.Module):
+#    # initializers, d=num_filters
+#    def __init__(self, d=32, activation='relu'):
+#        super(Mnist_Estimateur, self).__init__()
+##         in_channels, out_channels, kernel_size, stride, padding, dilation
+#        self.conv1 = nn.Conv2d(1, d, 8, 1, 0) # (28-8)+1 = 21
+#        self.conv2 = nn.Conv2d(d, d*2, 6, 1, 0) # (21-6)+1= 16
+#        self.conv3 = nn.Conv2d(d*2, d*4, 5, 1, 0) # (16-5)+1= 12
+#        self.fc1 = nn.Linear(18432,1024)
+#        self.fc2 = nn.Linear(1024,NO_CLASSES)
+#        if activation == 'relu':
+#            self.active = nn.ReLU() 
+#        else :
+#            self.active = nn.ELU()
+#
+#    def init_weights(self, mean, std):
+#        for m in self._modules:
+#            if type(m) == nn.Linear:
+#                nn.init.xavier_uniform(m.weight)
+#            if isinstance(m, nn.ConvTranspose2d) or isinstance(m, nn.Conv2d):
+#                m.weight.data.normal_(mean, std)
+#                m.bias.data.zero_()
+#
+#    def forward(self, input): 
+#        x = self.active(self.conv1(input))
+#        x = self.active(self.conv2(x))
+#        x = self.active( self.conv3(x) )
+#        x = x.view(x.size(0), -1)
+#        x = self.active(self.fc1(x))
+#        x = self.fc2(x)
+#        return x
+#        
+    
 class Mnist_Estimateur(nn.Module):
     # initializers, d=num_filters
     def __init__(self, d=32, activation='relu'):
         super(Mnist_Estimateur, self).__init__()
-        # in_channels, out_channels, kernel_size, stride, padding, dilation
-        self.conv1 = nn.Conv2d(1, d, 8, 1, 0) # (28-8)+1 = 21
-        self.conv2 = nn.Conv2d(d, d*2, 6, 1, 0) # (21-6)+1= 16
-        self.conv3 = nn.Conv2d(d*2, d*4, 5, 1, 0) # (16-5)+1= 12
-        self.fc1 = nn.Linear(18432,1024)
-        self.fc2 = nn.Linear(1024,NO_CLASSES)
-        if activation == 'relu':
-            self.active = nn.ReLU() 
-        else :
-            self.active = nn.ELU()
+        
+        self.conv = nn.Sequential(
+            # Layer 1
+            nn.Conv2d(in_channels=1, out_channels=d, kernel_size=(8, 8)), #(28-8 )+1 = 21
+            nn.BatchNorm2d(d),
+            nn.ELU(),
+    
+            # Layer 2
+            nn.Conv2d(in_channels=d, out_channels=2*d, kernel_size=(6, 6)), # (21-6)+1 = 16 
+            nn.BatchNorm2d(2*d)  ,          
+            nn.ELU(),
+            nn.MaxPool2d(kernel_size=(2, 2), stride=2), # 8 
+            
+            # Layer 3
+            nn.Conv2d(in_channels=2*d, out_channels=4*d, kernel_size=(5, 5)), # (8-5)+1 = 4
+            nn.BatchNorm2d(4*d),
+            nn.ELU(),
+            nn.MaxPool2d(kernel_size=(2, 2), stride=2), # chanel 128 feature map 2*2
+            
+        )
+        # Logistic Regression
+        self.clf = nn.Linear(512, 10)
 
     def init_weights(self, mean, std):
         for m in self._modules:
@@ -99,39 +139,217 @@ class Mnist_Estimateur(nn.Module):
 
 
     def forward(self, input): 
-        x = self.active(self.conv1(input))
-        x = self.active(self.conv2(x))
-        x = self.active( self.conv3(x) )
-        x = x.view(x.size(0), -1)
-        x = self.active(self.fc1(x))
-        x = self.fc2(x)
+        
+        x = self.conv(input)
+        return self.clf(x.view(len(x), -1 ))
 
-        return x
+# plot figure 2 certificate vs. worst case
+def plot_certificate(model,loss_train,gamma,valid_data_loader) :
+    fig = plt.figure()
+    certificate=[] #E_train[phi(theta,z)] + gamma*rho
+    list_rho = []
+    list_worst = []
+    for rho in range(0,350,5):
+        rho = rho/100.0
+        certificate.append(loss_train+gamma*rho)
+        
+    #test worst case 
+    list_rho = []
+    list_worst = []
+    for g in range(90,230,10) :
+        g=g/100.0
+        rho, e = exp1.cal_worst_case(model,valid_data_loader, g, 0.12)
+        list_rho.append(rho)
+        list_worst.append(e + rho * g)
+    
+    plt.plot(list_rho,list_worst, c='red', label=r"Test worst-case: $\sup_{P:W_c(P,\hat{P}_{test}) \leq \rho } E_P [l(\theta_{WRM};Z)]$")
+    plt.plot(np.array(range(0,65,5))/100.0,certificate,c='blue', label=r"Certificate: $E_{\hat{P}_n}[\phi_{\gamma}(\theta_{WRM};Z)]+\gamma \rho$")
+    plt.xlabel(r"$\rho$")
+    plt.xlim([0,0.65])
+    plt.ylim([0,1.3])
+    plt.legend(loc="lower right")
+    return fig
 
+# L2 or infinity attack, return accuracy on test_data_loader
+def attack(model,test_data_loader, p=2, epsilon = 0.01, alpha = 0.1) :
+    T_adv = 15
+    loss_function = nn.CrossEntropyLoss()
+    valid_data_x = torch.FloatTensor(len(test_data_loader.dataset),1,28,28)
+    valid_data_y = torch.LongTensor(len(test_data_loader.dataset))
+    count = 0
+    
+    for x_, y_ in test_data_loader :
+        if USE_CUDA:
+            x_, y_ = x_.cuda(), y_.cuda()
+        input_var, target_var  = Variable(x_, requires_grad=True), Variable(y_)
+
+        #generate attack data
+        for n in range(1, T_adv + 1) :
+            step_alpha = float(alpha /np.sqrt(n))
+            zero_gradients(input_var)
+            output = model(input_var)
+            loss = loss_function(output, target_var)
+            loss.backward()
+            x_grad = input_var.grad.data
+            if p == 2:
+#                delta_x = epsilon *  x_grad / torch.norm(x_grad.view(len(x_),1),2,1)
+                grad_ = x_grad.view(len(x_),-1)
+                grad_ = grad_/torch.norm(grad_,2,1).view(len(x_),1).expand_as(grad_)
+                normed_grad = epsilon * grad_.view_as(x_grad)  
+            else:
+                # infinity-norm
+                normed_grad =  epsilon * torch.sign(x_grad)
+            # xi + alpha_t * delta_x
+#            normed_grad = step_alpha * normed_grad 
+#            normed_grad.clamp_(-epsilon, epsilon)
+#            input_var.data +=  normed_grad
+            normed_grad.clamp_(-epsilon, epsilon)
+            step_adv = input_var.data + step_alpha * normed_grad # x^(t+1) = x^(t) + alpha * delta_x^t
+            total_adv = step_adv - x_  #x^t - x
+            total_adv.clamp_(-epsilon, epsilon) # ||x^t-x|| <= epsilon
+            input_adv = x_ + total_adv 
+            input_adv.clamp_(-1.0, 1.0) #mnist data between -1,1
+            input_var.data = input_adv
+            
+        valid_data_x[count:count+len(x_),:] = input_var.data.cpu()
+        valid_data_y[count:count+len(x_)] = y_.clone().cpu()
+        count += len(x_)
+    dataset = torch.utils.data.TensorDataset(valid_data_x, valid_data_y)
+    data_loader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=True, num_workers=2)
+    return exp1.evaluate(model,data_loader)
+
+# errors when attacked
+def get_errors(model, test_data_loader, p=2) :
+    C2 = 9.21
+    epsilons = np.array(range(0,22,2))/100.0
+    if p==2  :
+        epsilons = np.array(range(0,27,2))/100.0 * C2
+    errors = []
+    for e in epsilons :
+        errors.append(1.0-attack(model,test_data_loader,p,float(e), alpha=0.1)/100.0)
+    return epsilons, errors
+
+def plot_attack_error(list_errors,labels, p=2) :
+    fig = plt.figure()
+    C2 = 9.21
+    epsilons = np.array(range(0,22,2))/100.0
+    plt.xlabel(r"$\epsilon_{adv}/C_{\infty}$") 
+    if p==2  :
+        epsilons = np.array(range(0,27,2))/100.0 * C2
+        plt.xlabel(r"$\epsilon_{adv}/C_2$")
+    
+    for i, errors in enumerate(list_errors) :
+        plt.plot(epsilons/C2, errors, label=labels[i])
+    plt.ylabel('Error')
+    plt.yscale('log')
+    plt.yticks([0.01,0.1,1.0])
+    plt.legend()
+    return fig
+
+#def plot_attack_error(models,test_data_loader,labels, p=2) :
+#    fig = plt.figure()
+#    C2 = 9.21
+#    epsilons = np.array(range(0,27,2))/100.0
+#    plt.xlabel(r"$\epsilon_{adv}/C_{\infty}$") 
+#    if p==2  :
+#        epsilons = np.array(range(0,22,2))/100.0 * C2
+#        plt.xlabel(r"$\epsilon_{adv}/C_2$")
+#    
+#    for i, model in enumerate(models) :
+#        errors = []
+#        for e in epsilons : 
+#            errors.append(1.0-attack(model,test_data_loader,p,float(e), alpha=0.1)/100.0)   
+#        plt.plot(epsilons, errors, label=labels[i])
+#    plt.ylabel('Error')
+#    plt.yscale('log')
+#    plt.legend()
+#    return fig
 #%%
 if __name__=='__main__':
+    MIN_LR0 = 0.0001
+    MAX_LR0 = 0.04
+    #number of adversarial iterations
+    T_ADV = 15
 
+#    C2 = 0
+#    Cinf = 0
+#    count = 0
+#    for x_, y_ in train_data_loader :
+#        if USE_CUDA:
+#            x_, y_ = x_.cuda(), y_.cuda()
+#        x_, y_ = Variable(x_), Variable(y_)
+#        C2 += torch.sum(torch.sqrt(torch.sum(torch.norm(x_,p=2,dim=3)**2, dim=2))).data[0]
+#        infnorm, _ = torch.max(torch.sum(torch.abs(x_),dim=3), dim=2)
+#        Cinf += torch.sum(infnorm).data[0]
+#        count += len(x_)
+#    C2 = C2/float(count)
+#    Cinf = Cinf/float(count)
+    C2 = 9.21
+    Cinf = 1.00
+    GAMMA = 0.04 * C2
+    
     loss_function=nn.CrossEntropyLoss()
 
-    mnist_WRM=Mnist_Estimateur(activation='elu')
+    mnist_WRM = Mnist_Estimateur(activation='elu')
+
     if USE_CUDA:
-        mnist_WRM=mnist_WRM.cuda()
+        mnist_WRM.cuda()
     mnist_WRM.init_weights(mean=0.0, std=0.02)
     # optimizer = optim.Adam(mnist_WRM.parameters(), lr=LR0_MIN, betas=(0.5, 0.999))
     # optimizer = optim.RMSprop(mnist_WRM.parameters(), lr=LR0_MIN)
     optimizer = torch.optim.Adam(mnist_WRM.parameters(), lr=MIN_LR0)
 
-    # exp1.train(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
-    #     TRAIN_EPOCH ,min_lr0=MIN_LR0,min_lr_adjust=False)
+#    exp1.train(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
+#         TRAIN_EPOCH ,min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_ERM')
 
     exp1.train_WRM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
-        TRAIN_EPOCH , GAMMA, max_lr0=MAX_LR0, min_lr0=MIN_LR0, min_lr_adjust=False, savepath='mnist_wrm_elu')
-        
+        TRAIN_EPOCH , GAMMA, max_lr0=MAX_LR0, min_lr0=MIN_LR0, min_lr_adjust=False, savepath='mnist_wrm')
+   
 #%%
 if __name__=='__main__':
+    model = Mnist_Estimateur()
+    net_WRM, train_hist = exp1.loadCheckpoint(model,'mnist_wrm_ep30')
+#    fig = plot_certificate(net_WRM,train_hist['loss_maxItr'][-1],GAMMA,valid_data_loader)    
+print (train_hist['loss_maxItr'][-1] + GAMMA * 0.282)
+#%%
+certificate=[] #E_train[phi(theta,z)] + gamma*rho
+list_rho = []
+list_worst = []
+for rho in range(0,355,50) :
+    rho = rho/100.0
+    certificate.append(train_hist['loss_maxItr'][-1]+GAMMA*rho)
 
-    filename='mnist_wrm_elu_ep42'
-    mnist_WRM,_=exp1.loadCheckpoint(mnist_WRM,filename)
+for g in [0.08,0.1,0.3, 0.4] :
+    rho, e = cal_worst_case(net_WRM,valid_data_loader, g, 0.04)
+    print (rho, e+rho*g)
+    list_rho.append(rho)
+    list_worst.append(e + rho * g)
 
-    print('Accuracy on test data: ',exp1.evaluate(mnist_WRM,test_data_loader))
+plt.plot(list_rho,list_worst, c='red', label=r"Test worst-case: $\sup_{P:W_c(P,\hat{P}_{test}) \leq \rho } E_P [l(\theta_{WRM};Z)]$")
+plt.plot(np.array(range(0,355,50))/100.0,certificate,c='blue', label=r"Certificate: $E_{\hat{P}_n}[\phi_{\gamma}(\theta_{WRM};Z)]+\gamma \rho$")
+   
+#%%
+if __name__=='__main__':
+    model = Mnist_Estimateur()
+    filename = 'mnist_wrm_ep21' #'mnist_wrm_elu_ep42'
+    model,_=exp1.loadCheckpoint(model,filename)
+#    print (attack(model,test_data_loader, p=2, epsilon = 0.5, alpha = 0.1))
+#    print('Accuracy on test data: ',exp1.evaluate(mnist_WRM,test_data_loader))
         
+#%%
+list_errors = []
+epsilons, errors = get_errors(model, test_data_loader, p=2)
+list_errors.append(errors)
+labels =['ERM']
+plot_attack_error(list_errors,labels, p=2)
+
+#array([ 0.0178,  0.0325,  0.0552,  0.0901,  0.1384,  0.203 ,  0.2811,
+#        0.3679,  0.4615,  0.5626,  0.6601,  0.7513,  0.8354,  0.8975])
+#%%
+#epsilon = []
+#epsilon = np.array(range(1,5))/10
+#errors = [0.01,0.02,0.1,1]
+#for e in epsilon :
+#    plt.plot(epsilon, errors)
+#    plt.yticks([0.01,0.1,1.0])
+#    plt.yscale('log')
