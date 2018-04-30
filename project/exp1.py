@@ -18,8 +18,9 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import random
+from torch.autograd.gradcheck import zero_gradients
 
-USE_CUDA = torch.cuda.is_available()
+USE_CUDA =  torch.cuda.is_available()
 
 #%%
 
@@ -167,17 +168,22 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
                 x_, y_ = x_.cuda(), y_.cuda()
             #J = 0.5J(theta,x,y) + 0.5 J(theta,x_adversarial,y)
             x_, y_ = Variable(x_,requires_grad=True), Variable(y_)
-            optimizer.zero_grad()
+            zero_gradients(x_) #if not, run out of memory
+            optimizer.zero_grad() 
             loss_true = loss_function(model(x_),y_)
             loss_true.backward(half)
-            x_grad = x_.grad
+            x_grad = x_.grad.data
             x_adversarial = x_.clone()
             if USE_CUDA:
                 x_adversarial = x_adversarial.cuda()
             
             #L2 x_adv = x + epsilon * (grad_x/||grad_x||)
-            # delta_x = epsilon * torch.div(x_grad.data,torch.norm(x_grad.data,2,1).view(-1,1))
-            delta_x = epsilon * x_grad.data/torch.norm(x_grad.data.view(len(x_),-1),2,1).view(len(x_),1)
+            # delta_x = epsilon * torch.div(x_grad,torch.norm(x_grad,2,1).view(-1,1))
+#            delta_x = epsilon * x_grad/torch.norm(x_grad.view(len(x_),-1),2,1).view(len(x_),1)
+#            delta_x[delta_x!=delta_x]=0
+            grad_ = x_grad.view(len(x_),-1)
+            grad_ = grad_/torch.norm(grad_,2,1).view(len(x_),1).expand_as(grad_)
+            delta_x = epsilon * grad_.view_as(x_grad)  
             delta_x[delta_x!=delta_x]=0
 
             #L_infinity x_adv = x+epsilon*sign(grad_x)
@@ -186,14 +192,13 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
             delta_x.clamp_(-epsilon, epsilon)
             x_adversarial.data = x_.data + delta_x
             
-            # optimizer.zero_grad()
-            # x_.grad.data.zero_()
             loss_adversarial = loss_function(model(x_adversarial),y_)
             
             loss_adversarial.backward(half)
             optimizer.step()
 
             losses.append((loss_true.data[0]+loss_adversarial.data[0])/2.0)
+            zero_gradients(x_)
       
         if min_lr_adjust == True:
             adjust_lr(optimizer,min_lr0,ep,num_epoch)
@@ -480,6 +485,7 @@ def plot_certificate(model,loss_train,gamma,valid_data_loader) :
     return fig
 
 def cal_worst_case(model, valid_data_loader, gamma, max_lr0,d=1) :
+    model.eval()
     loss_maxItr = []
     T_adv=15
     rhos = []
@@ -547,7 +553,7 @@ if __name__=='__main__':
     net_ERM.init_weights_glorot()
     optimizer = torch.optim.Adam(net_ERM.parameters(), lr=LR0)
     train(net_ERM,optimizer,loss_function, train_data_loader,valid_data_loader,30,min_lr0=LR0,min_lr_adjust=False)
-
+#%%
     LR0 = 0.01
     EPSILON=0.265 #0.03 #0.3
     net_FGM = MLP('elu')
@@ -558,7 +564,7 @@ if __name__=='__main__':
     optimizer = torch.optim.Adam(net_FGM.parameters(), lr=LR0)
     train_FGM(net_FGM,optimizer,loss_function, train_data_loader,valid_data_loader, 30, epsilon=EPSILON, min_lr0=LR0,min_lr_adjust=False)
 
-
+#%%
     LR0 = 0.01
     MAX_LR0=0.08
     GAMMA=2
@@ -574,7 +580,7 @@ if __name__=='__main__':
 #%%    
     LR0 = 0.01
     EPSILON=0.03 #0.03 #0.3
-    net_IFGM = MLP(activation='relu')
+    net_IFGM = MLP(activation='elu')
     if USE_CUDA :
         net_IFGM.cuda()
     net_IFGM.init_weights_glorot()
