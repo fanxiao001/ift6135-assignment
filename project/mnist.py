@@ -171,7 +171,7 @@ def plot_certificate(model,loss_train,gamma,valid_data_loader) :
     return fig
 
 # L2 or infinity attack, return accuracy on test_data_loader
-def attack(model,test_data_loader, p=2, epsilon = 0.01, alpha = 0.1) :
+def attack_PGM(model,test_data_loader, p=2, epsilon = 0.01, alpha = 0.1, random=False) :
     model.eval()
     T_adv = 15
     loss_function = nn.CrossEntropyLoss()
@@ -183,6 +183,12 @@ def attack(model,test_data_loader, p=2, epsilon = 0.01, alpha = 0.1) :
         if USE_CUDA:
             x_, y_ = x_.cuda(), y_.cuda()
         input_var, target_var  = Variable(x_, requires_grad=True), Variable(y_)
+        
+        if random == True : 
+            noise = torch.FloatTensor(x_.size()).uniform_(-epsilon, epsilon)
+            if USE_CUDA : 
+                noise = noise.cuda()
+            input_var.data += noise
 
         #generate attack data
         for n in range(1, T_adv + 1) :
@@ -223,7 +229,7 @@ def attack(model,test_data_loader, p=2, epsilon = 0.01, alpha = 0.1) :
     return exp1.evaluate(model,data_loader)
 
 # errors when attacked
-def get_errors(model, test_data_loader, p=2, alpha =0.1) :
+def get_errors(model, test_data_loader, p=2, alpha =0.1, random=False) :
     C2 = 9.21
     Cinf =  1.0
     epsilons = np.array(range(0,22,2))/100.0 * Cinf
@@ -231,7 +237,7 @@ def get_errors(model, test_data_loader, p=2, alpha =0.1) :
         epsilons = np.array(range(0,27,2))/100.0 * C2
     errors = []
     for e in epsilons :
-        errors.append(1.0-attack(model,test_data_loader,p,float(e), alpha)/100.0)
+        errors.append(1.0-attack_PGM(model,test_data_loader,p,float(e), alpha, random)/100.0)
     return epsilons, errors
 
 def plot_attack_error(list_errors,labels, p=2) :
@@ -264,7 +270,7 @@ def plot_attack_error(list_errors,labels, p=2) :
 #    for i, model in enumerate(models) :
 #        errors = []
 #        for e in epsilons : 
-#            errors.append(1.0-attack(model,test_data_loader,p,float(e), alpha=0.1)/100.0)   
+#            errors.append(1.0-attack_PGM(model,test_data_loader,p,float(e), alpha=0.1)/100.0)   
 #        plt.plot(epsilons, errors, label=labels[i])
 #    plt.ylabel('Error')
 #    plt.yscale('log')
@@ -272,7 +278,7 @@ def plot_attack_error(list_errors,labels, p=2) :
 #    return fig
 #%%
 if __name__=='__main__':
-    MIN_LR0 = 0.0001
+    MIN_LR0 = 0.001 #ifgm 0.01, others use 0.0001
     MAX_LR0 = 0.04
     #number of adversarial iterations
     T_ADV = 15
@@ -309,8 +315,11 @@ if __name__=='__main__':
 #    exp1.train(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
 #         TRAIN_EPOCH ,min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_erm')
     
-    exp1.train_FGM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
-         TRAIN_EPOCH ,EPSILON, min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_fgm')
+#    exp1.train_FGM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
+#         TRAIN_EPOCH ,EPSILON, min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_fgm')
+    
+    exp1.train_IFGM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
+         TRAIN_EPOCH ,EPSILON, min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_ifgm')
 
 #    exp1.train_WRM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
 #        TRAIN_EPOCH , GAMMA, max_lr0=MAX_LR0, min_lr0=MIN_LR0, min_lr_adjust=False, savepath='mnist_wrm')
@@ -351,7 +360,7 @@ if __name__=='__main__':
     filename = 'mnist_wrm_ep30' #'mnist_wrm_elu_ep42'
     model,_= exp1.loadCheckpoint(model,filename)
 #    print (exp1.evaluate(model,test_data_loader))
-    print (attack(model,test_data_loader, p=2, epsilon = 0.0, alpha = 0.1))
+    print (attack_PGM(model,test_data_loader, p=2, epsilon = 0.0, alpha = 0.1))
 #    print('Accuracy on test data: ',exp1.evaluate(mnist_WRM,test_data_loader))
         
 #%%
@@ -359,15 +368,18 @@ p=3
 list_errors = []
 model = Mnist_Estimateur()
 model,_= exp1.loadCheckpoint(model,'mnist_erm_ep30')
-epsilons, errors = get_errors(model, test_data_loader, p, alpha = 0.2)
+epsilons, errors = get_errors(model, test_data_loader, p, alpha = 1.0, random=False)
 list_errors.append(errors)
 model,_= exp1.loadCheckpoint(model,'mnist_fgm_ep24')
-epsilons, errors = get_errors(model, test_data_loader, p, alpha = 0.2)
+epsilons, errors = get_errors(model, test_data_loader, p, alpha = 1.0, random=False)
+list_errors.append(errors)
+model,_= exp1.loadCheckpoint(model,'mnist_ifgm_ep30')
+epsilons, errors = get_errors(model, test_data_loader, p, alpha = 1.0, random=False)
 list_errors.append(errors)
 model,_= exp1.loadCheckpoint(model,'mnist_wrm_ep30')
-epsilons, errors = get_errors(model, test_data_loader, p, alpha = 0.2)
+epsilons, errors = get_errors(model, test_data_loader, p, alpha = 1.0, random=False)
 list_errors.append(errors)
-labels =['ERM','FGM','WRM']
+labels =['ERM','FGM','IFGM','WRM']
 fig = plot_attack_error(list_errors,labels, p)
 
 #array([ 0.0178,  0.0325,  0.0552,  0.0901,  0.1384,  0.203 ,  0.2811,

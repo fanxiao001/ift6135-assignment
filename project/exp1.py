@@ -252,17 +252,25 @@ def train_IFGM(model,optimizer,loss_function, train_loader, valid_loader, num_ep
                 optimizer.zero_grad()
                 loss_true = loss_function(model(x_adversarial),y_)
                 loss_true.backward()
-                x_grad = x_.grad
+                x_grad = x_.grad.data
                 
                 #L2 x_adv = x + epsilon * (grad_x/||grad_x||)
-                delta_x=epsilon * torch.div(x_grad.data,torch.norm(x_grad.data,2,1).view(-1,1))
+#                delta_x=epsilon * torch.div(x_grad,torch.norm(x_grad,2,1).view(-1,1))
+#                delta_x[delta_x!=delta_x]=0
+                grad_ = x_grad.view(len(x_),-1)
+                grad_ = grad_/torch.norm(grad_,2,1).view(len(x_),1).expand_as(grad_)
+                delta_x = epsilon * grad_.view_as(x_grad)  
                 delta_x[delta_x!=delta_x]=0
 
                 #L_infinity x_adv = x+epsilon*sign(grad_x)
                 # delta_x=epsilon * torch.sign(x_grad.data) 
 
                 delta_x.clamp_(-epsilon, epsilon)
-                x_adversarial.data += delta_x
+#                x_adversarial.data += delta_x
+                step_adv = x_adversarial.data + delta_x
+                total_adv = step_adv - x_.data
+                total_adv.clamp_(-epsilon, epsilon)
+                x_adversarial.data = x_.data + total_adv
                 
             optimizer.zero_grad()
             loss_adversarial = loss_function(model(x_adversarial),y_)
