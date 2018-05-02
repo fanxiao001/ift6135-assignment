@@ -224,7 +224,7 @@ def train_FGM(model,optimizer,loss_function, train_loader, valid_loader, num_epo
         
                  
 # iterative adversarial training using fast gradient L2
-def train_IFGM(model,optimizer,loss_function, train_loader, valid_loader, num_epoch, epsilon,min_lr0=0.001,min_lr_adjust=False,savepath=None) :
+def train_IFGM(model,optimizer,loss_function, train_loader, valid_loader, num_epoch, epsilon,min_lr0=0.001,alpha=0.1, min_lr_adjust=False,savepath=None) :
     T_adv = 15
     model.train()
     start_time = time.time()
@@ -249,6 +249,7 @@ def train_IFGM(model,optimizer,loss_function, train_loader, valid_loader, num_ep
                 
             for n in range(T_adv):
                 #J = 0.5J(theta,x,y) + 0.5 J(theta,x_adversarial,y)
+                step_alpha = float(alpha /np.sqrt(n+1))
                 optimizer.zero_grad()
                 loss_true = loss_function(model(x_adversarial),y_)
                 loss_true.backward()
@@ -267,7 +268,7 @@ def train_IFGM(model,optimizer,loss_function, train_loader, valid_loader, num_ep
 
                 delta_x.clamp_(-epsilon, epsilon)
 #                x_adversarial.data += delta_x
-                step_adv = x_adversarial.data + delta_x
+                step_adv = x_adversarial.data + step_alpha * delta_x
                 total_adv = step_adv - x_.data
                 total_adv.clamp_(-epsilon, epsilon)
                 x_adversarial.data = x_.data + total_adv

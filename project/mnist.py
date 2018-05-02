@@ -278,8 +278,8 @@ def plot_attack_error(list_errors,labels, p=2) :
 #    return fig
 #%%
 if __name__=='__main__':
-    MIN_LR0 = 0.001 #ifgm 0.01, others use 0.0001
-    MAX_LR0 = 0.04
+    MIN_LR0 = 0.0001 
+    MAX_LR0 = 0.04 #step size for iterative method and attack method
     #number of adversarial iterations
     T_ADV = 15
 
@@ -319,15 +319,15 @@ if __name__=='__main__':
 #         TRAIN_EPOCH ,EPSILON, min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_fgm')
     
     exp1.train_IFGM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
-         TRAIN_EPOCH ,EPSILON, min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_ifgm')
+         TRAIN_EPOCH ,EPSILON, min_lr0=MIN_LR0,alpha=MAX_LR0, min_lr_adjust=False, savepath='mnist_ifgm')
 
 #    exp1.train_WRM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
-#        TRAIN_EPOCH , GAMMA, max_lr0=MAX_LR0, min_lr0=MIN_LR0, min_lr_adjust=False, savepath='mnist_wrm')
-#   
+#        TRAIN_EPOCH , GAMMA, max_lr0=MAX_LR0, min_lr0=MIN_LR0, min_lr_adjust=True, savepath='mnist_wrm')
+   
 #%%
 if __name__=='__main__':
     model = Mnist_Estimateur()
-    model, train_hist = exp1.loadCheckpoint(model,'mnist_wrm_ep30')
+    model, train_hist = exp1.loadCheckpoint(model,'mnist_wrm_ep24')
     fig = plot_certificate(model,train_hist['loss_maxItr'][-1]+0.05,GAMMA,test_data_loader)    
 #%%
 model = Mnist_Estimateur()
@@ -364,22 +364,23 @@ if __name__=='__main__':
 #    print('Accuracy on test data: ',exp1.evaluate(mnist_WRM,test_data_loader))
         
 #%%
-p=3
-list_errors = []
+p=2
+list_errors = []      
 model = Mnist_Estimateur()
 model,_= exp1.loadCheckpoint(model,'mnist_erm_ep30')
-epsilons, errors = get_errors(model, test_data_loader, p, alpha = 1.0, random=False)
+epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
 list_errors.append(errors)
 model,_= exp1.loadCheckpoint(model,'mnist_fgm_ep24')
-epsilons, errors = get_errors(model, test_data_loader, p, alpha = 1.0, random=False)
+epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
 list_errors.append(errors)
-model,_= exp1.loadCheckpoint(model,'mnist_ifgm_ep30')
-epsilons, errors = get_errors(model, test_data_loader, p, alpha = 1.0, random=False)
+model,_= exp1.loadCheckpoint(model,'mnist_ifgm_ep27')
+epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
 list_errors.append(errors)
 model,_= exp1.loadCheckpoint(model,'mnist_wrm_ep30')
-epsilons, errors = get_errors(model, test_data_loader, p, alpha = 1.0, random=False)
+epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
 list_errors.append(errors)
 labels =['ERM','FGM','IFGM','WRM']
+#labels =['IFGM','WRM']
 fig = plot_attack_error(list_errors,labels, p)
 
 #array([ 0.0178,  0.0325,  0.0552,  0.0901,  0.1384,  0.203 ,  0.2811,
