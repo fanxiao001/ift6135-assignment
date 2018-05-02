@@ -72,6 +72,7 @@ def evaluate (model, valid_data) :
         ACCURACY += float(torch.eq(predicted,y_).sum().cpu().data.numpy())
     return ACCURACY / float(COUNTER) *100.0
 
+# deprecated
 # evaluate on adversarial examples
 def evaluate_adversarial (model, loss_function, valid_data, epsilon=0.05) :
     COUNTER = 0
@@ -97,7 +98,6 @@ def evaluate_adversarial (model, loss_function, valid_data, epsilon=0.05) :
     return ACCURACY / float(COUNTER) *100.0
 
 #basic training minimizing ERM          
-
 def train(model,optimizer,loss_function, train_loader,valid_loader,num_epoch,min_lr0=0.001,min_lr_adjust=False, savepath=None) :
     model.train()
     start_time = time.time()
@@ -278,7 +278,7 @@ def train_IFGM(model,optimizer,loss_function, train_loader, valid_loader, num_ep
             loss_adversarial.backward()
             optimizer.step()
                 
-            losses.append((loss_true.data[0]+loss_adversarial.data[0])/2.0)
+            losses.append(loss_adversarial.data[0])
 
         if min_lr_adjust == True:
             adjust_lr(optimizer,min_lr0,ep,num_epoch)
@@ -428,7 +428,6 @@ def synthetic_data(N_example) :
     return data_x, data_y
 
 #%%
-
 def plotGraph(models,data_x, data_y, labels) :
     
     fig = plt.figure(figsize=(5,5))
@@ -467,7 +466,7 @@ def init_seed(seed=123):
         torch.cuda.manual_seed_all(seed)
         
 # plot figure 2 certificate vs. worst case
-def plot_certificate(model,loss_train,gamma,valid_data_loader) :
+def plot_certificate(model,loss_train,gamma,valid_data_loader,max_lr0) :
     fig = plt.figure()
     certificate=[] #E_train[phi(theta,z)] + gamma*rho
     list_rho = []
@@ -481,7 +480,7 @@ def plot_certificate(model,loss_train,gamma,valid_data_loader) :
     list_worst = []
     for g in range(60,300,5) :
         g=g/100.0
-        rho, e = cal_worst_case(model,valid_data_loader, g, 0.12)
+        rho, e = cal_worst_case(model,valid_data_loader, g, max_lr0)
         list_rho.append(rho)
         list_worst.append(e + rho * g)
     
@@ -493,7 +492,7 @@ def plot_certificate(model,loss_train,gamma,valid_data_loader) :
     plt.legend(loc="lower right")
     return fig
 
-def cal_worst_case(model, valid_data_loader, gamma, max_lr0,d=1) :
+def cal_worst_case(model, valid_data_loader, gamma, max_lr0) :
     model.eval()
     loss_maxItr = []
     T_adv=15
@@ -575,7 +574,7 @@ if __name__=='__main__':
 
 #%%
     LR0 = 0.01
-    MAX_LR0=0.08
+    MAX_LR0=0.12
     GAMMA=2
     net_WRM = MLP(activation='elu')
     if USE_CUDA :
@@ -606,9 +605,10 @@ if __name__=='__main__':
 
 #%%
 if __name__=='__main__':
+    MAX_LR0=0.12
     model = MLP('elu')
     net_WRM, train_hist = loadCheckpoint(model,'syn_WRM_ep30')
-    fig = plot_certificate(net_WRM,train_hist['loss_maxItr'][-1],GAMMA,valid_data_loader)
+    fig = plot_certificate(net_WRM,train_hist['loss_maxItr'][-1],GAMMA,valid_data_loader,MAX_LR0)
     fig.legend()
 #    fig.savefig('fig2-syn.pdf')
 #%%

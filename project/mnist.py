@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Sun Apr 29 2018 02:26:24 GMT-0400 (EDT)
+# @last-modified Wed May 02 2018 14:37:34 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -43,7 +43,7 @@ exp1.init_seed()
 
 NO_CLASSES = 10
 TRAIN_DATA_SIZE = 50000
-TRAIN_EPOCH = 30#10000
+TRAIN_EPOCH = 30 #10000
 BATCH_SIZE = 128
 
 
