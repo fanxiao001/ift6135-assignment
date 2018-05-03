@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Thu May 03 2018 12:10:54 GMT-0400 (EDT)
+# @last-modified Thu May 03 2018 12:54:10 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -276,7 +276,7 @@ def attack_WRM(model,test_data_loader, gamma=0.04, max_lr0=0.0001, epsilon = 0.0
             optimizer_zt.step()
             main.adjust_lr_zt(optimizer_zt,max_lr0, n+1)
             
-        rhos.append(rho)
+        rhos.append(rho.data[0])
         
         if get_err:
             valid_data_x[count:count+len(x_),:] = z_hat.cpu()
@@ -287,7 +287,7 @@ def attack_WRM(model,test_data_loader, gamma=0.04, max_lr0=0.0001, epsilon = 0.0
         data_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
         err=(1.0-main.evaluate(model,data_loader))/100
 
-    return torch.mean(torch.Tensor(rhos)),err
+    return torch.mean(torch.FloatTensor(rhos)),err
 
 def rho_vs_gamma(model, test_data_loader, max_lr0, random=False, get_err=False) :
     C2 = 9.21
