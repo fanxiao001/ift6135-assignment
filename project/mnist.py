@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Thu May 03 2018 12:54:10 GMT-0400 (EDT)
+# @last-modified Thu May 03 2018 14:23:49 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -289,9 +289,55 @@ def attack_WRM(model,test_data_loader, gamma=0.04, max_lr0=0.0001, epsilon = 0.0
 
     return torch.mean(torch.FloatTensor(rhos)),err
 
+# WRM attack, return accuracy on test_data_loader
+def attack_WRM_sample(model,test_data_loader, gamma=0.04, max_lr0=0.0001, epsilon = 0.01, random=False, get_err=False) :
+    model.eval()
+    loss_function = nn.CrossEntropyLoss()
+    
+    if get_err:
+        valid_data_x = torch.FloatTensor(len(test_data_loader.dataset),1,28,28)
+        valid_data_y = torch.LongTensor(len(test_data_loader.dataset))
+    
+    for x_, y_ in test_data_loader :
+        # if y_
+
+        if USE_CUDA:
+            x_, y_ = x_.cuda(), y_.cuda()
+        x_, y_  = Variable(x_), Variable(y_)
+
+    # #initialize z_hat with x_
+    # z_hat = x_.data.clone()
+    # if USE_CUDA:
+    #     z_hat = z_hat.cuda()
+    # if random : 
+    #     noise = torch.FloatTensor(x_.size()).uniform_(-epsilon, epsilon)
+    #     if USE_CUDA : 
+    #         noise = noise.cuda()
+    #     z_hat += noise
+        
+    # z_hat = Variable(z_hat,requires_grad=True)
+    # #running the maximizer for z_hat
+    # optimizer_zt = torch.optim.Adam([z_hat], lr=max_lr0)
+    # loss_zt = 0 # phi(theta,z0)
+    # rho = 0 #E[c(Z,Z0)]
+    # for n in range(1,T_adv+1) :
+    #     optimizer_zt.zero_grad()
+    #     delta = z_hat - x_
+    #     rho = torch.mean((torch.norm(delta.view(len(x_),-1),2,1)**2)) 
+    #     loss_zt = - ( loss_function(model(z_hat),y_)-  gamma * rho)
+    #     loss_zt.backward()
+    #     optimizer_zt.step()
+    #     main.adjust_lr_zt(optimizer_zt,max_lr0, n+1)
+        
+    # rhos.append(rho.data[0])
+        
+
+    return 1
+
 def rho_vs_gamma(model, test_data_loader, max_lr0, random=False, get_err=False) :
     C2 = 9.21
-    gammas = np.array(range(5,105,5))/25.0 * C2
+    gammas = C2/np.array(range(5,105,5))  #0.5-0.01 
+    print (gammas)
     rhos = []
     errors = []
     for g in gammas :
