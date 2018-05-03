@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Thu May 03 2018 00:51:01 GMT-0400 (EDT)
+# @last-modified Thu May 03 2018 12:10:54 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -256,7 +256,7 @@ def attack_WRM(model,test_data_loader, gamma=0.04, max_lr0=0.0001, epsilon = 0.0
         z_hat = x_.data.clone()
         if USE_CUDA:
             z_hat = z_hat.cuda()
-        if random == True : 
+        if random : 
             noise = torch.FloatTensor(x_.size()).uniform_(-epsilon, epsilon)
             if USE_CUDA : 
                 noise = noise.cuda()
@@ -276,7 +276,7 @@ def attack_WRM(model,test_data_loader, gamma=0.04, max_lr0=0.0001, epsilon = 0.0
             optimizer_zt.step()
             main.adjust_lr_zt(optimizer_zt,max_lr0, n+1)
             
-        rhos.append(0.1)
+        rhos.append(rho)
         
         if get_err:
             valid_data_x[count:count+len(x_),:] = z_hat.cpu()
@@ -295,6 +295,7 @@ def rho_vs_gamma(model, test_data_loader, max_lr0, random=False, get_err=False) 
     rhos = []
     errors = []
     for g in gammas :
+        # print(float(g))
         rho,err=attack_WRM(model,test_data_loader,float(g),max_lr0, random, get_err)
         rhos.append(rho)
         errors.append(err)
@@ -381,7 +382,7 @@ if USE_CUDA:
 #    C2 = C2/float(count)
 #    Cinf = Cinf/float(count)
 
-if __name__=='__main__':
+if False and __name__=='__main__':
     # optimizer = optim.Adam(model.parameters(), lr=LR0_MIN, betas=(0.5, 0.999))
     # optimizer = optim.RMSprop(model.parameters(), lr=LR0_MIN)
     optimizer = torch.optim.Adam(model.parameters(), lr=MIN_LR0)
@@ -403,7 +404,7 @@ if __name__=='__main__':
         TRAIN_EPOCH , GAMMA, max_lr0=MAX_LR0, min_lr0=MIN_LR0, min_lr_adjust=True, savepath='mnist_wrm')
 
 #%%
-if __name__=='__main__':
+if False and __name__=='__main__':
     model = Mnist_Estimateur()
     model, train_hist = main.loadCheckpoint(model,'mnist_wrm_ep24')
     fig = plot_certificate(model,train_hist['loss_maxItr'][-1]+0.05,GAMMA,test_data_loader)  
@@ -437,7 +438,7 @@ if __name__=='__main__':
 #     plt.legend()
 
 #%%
-if __name__=='__main__':
+if False and __name__=='__main__':
     model = Mnist_Estimateur()
     filename = 'mnist_wrm_ep30' #'mnist_wrm_elu_ep42'
     model,_= main.loadCheckpoint(model,filename)
@@ -446,7 +447,7 @@ if __name__=='__main__':
     print('Accuracy on test data: ',main.evaluate(mnist_WRM,test_data_loader))
         
 #%%
-if __name__=='__main__':
+if False and __name__=='__main__':
     p=2
     list_errors = []      
     model = Mnist_Estimateur()
@@ -486,7 +487,7 @@ if __name__=='__main__':
 
 
 #%%
-if __name__=='__main__':
+if True and __name__=='__main__':
     # model = Mnist_Estimateur()
     # model,_= main.loadCheckpoint(model,'mnist_wrm_ep30')
     list_rhos=[]
@@ -496,29 +497,24 @@ if __name__=='__main__':
     gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False, get_err=True)
     list_rhos.append(rhos)
     list_errors.append(errors)
-    main.saveCheckpoint(model,list_rhos,'mnist_erm_rho_vs_gamma_list_rhos')
-    main.saveCheckpoint(model,list_errors,'mnist_erm_rho_vs_gamma_list_errs')
 
     model,_= main.loadCheckpoint(model,'mnist_fgm_ep24')
     gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False, get_err=True)
     list_rhos.append(rhos)
     list_errors.append(errors)
-    main.saveCheckpoint(model,list_rhos,'mnist_fgm_rho_vs_gamma_list_rhos')
-    main.saveCheckpoint(model,list_errors,'mnist_fgm_rho_vs_gamma_list_errs')
 
     model,_= main.loadCheckpoint(model,'mnist_ifgm_ep30') #xiao27 louis30
     gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False, get_err=True)
-    list_errors.append(rhos)
+    list_rhos.append(rhos)
     list_errors.append(errors)
-    main.saveCheckpoint(model,list_rhos,'mnist_ifgm_rho_vs_gamma_list_rhos')
-    main.saveCheckpoint(model,list_errors,'mnist_ifgm_rho_vs_gamma_list_errs')
 
     model,_= main.loadCheckpoint(model,'mnist_wrm_ep27') #xiao30 louis27
     gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False, get_err=True)
     list_rhos.append(rhos)
     list_errors.append(errors)
-    main.saveCheckpoint(model,list_rhos,'mnist_wrm_rho_vs_gamma_list_rhos')
-    main.saveCheckpoint(model,list_errors,'mnist_wrm_rho_vs_gamma_list_errs')
+
+    main.saveCheckpoint(model,list_rhos,'mnist_rho_vs_gamma_list_rhos')
+    main.saveCheckpoint(model,list_errors,'mnist_rho_vs_gamma_list_errs')
 
     # labels =['ERM','FGM','IFGM','WRM']
     # #labels =['IFGM','WRM']
