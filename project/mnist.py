@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Wed May 02 2018 23:47:27 GMT-0400 (EDT)
+# @last-modified Thu May 03 2018 00:14:35 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -35,11 +35,11 @@ else:
     os.chdir("./")
 print(os.getcwd())
 
-import  exp1
-importlib.reload(exp1)
+import  main
+importlib.reload(main)
 
 USE_CUDA=torch.cuda.is_available()
-exp1.init_seed()
+main.init_seed()
 
 NO_CLASSES = 10
 TRAIN_DATA_SIZE = 50000
@@ -163,7 +163,7 @@ def plot_certificate(model,loss_train,gamma,valid_data_loader) :
     list_rho = []
     list_worst = []
     for g in [0.07, 0.09, 0.1, 0.12, 0.15, 0.2, 0.3, 0.4, 0.8, 1.2, 2.0, 3.0, 5.0] :
-        rho, e = exp1.cal_worst_case(model,valid_data_loader, g, 0.04)
+        rho, e = main.cal_worst_case(model,valid_data_loader, g, 0.04)
         list_rho.append(rho)
         list_worst.append(e + rho * g)
     
@@ -232,18 +232,21 @@ def attack_PGM(model,test_data_loader, p=2, epsilon = 0.01, alpha = 0.1, random=
         count += len(x_)
     dataset = torch.utils.data.TensorDataset(valid_data_x, valid_data_y)
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
-    return exp1.evaluate(model,data_loader)
+    return main.evaluate(model,data_loader)
     
 # WRM attack, return accuracy on test_data_loader
 def attack_WRM(model,test_data_loader, gamma=0.04,max_lr0=0.0001, epsilon = 0.01, random=False, get_err=False) :
     model.eval()
     T_adv = 15
     loss_function = nn.CrossEntropyLoss()
-    valid_data_x = torch.FloatTensor(len(test_data_loader.dataset),1,28,28)
-    valid_data_y = torch.LongTensor(len(test_data_loader.dataset))
+    
+    if get_err:
+        valid_data_x = torch.FloatTensor(len(test_data_loader.dataset),1,28,28)
+        valid_data_y = torch.LongTensor(len(test_data_loader.dataset))
+    
     count = 0
-    rhos=[]
     err=0
+    rhos=[]
     for x_, y_ in test_data_loader :
         if USE_CUDA:
             x_, y_ = x_.cuda(), y_.cuda()
@@ -271,7 +274,7 @@ def attack_WRM(model,test_data_loader, gamma=0.04,max_lr0=0.0001, epsilon = 0.01
             loss_zt = - ( loss_function(model(z_hat),y_)-  gamma * rho)
             loss_zt.backward()
             optimizer_zt.step()
-            exp1.adjust_lr_zt(optimizer_zt,max_lr0, n+1)
+            main.adjust_lr_zt(optimizer_zt,max_lr0, n+1)
             
         rhos.append(0.1)
         
@@ -282,7 +285,7 @@ def attack_WRM(model,test_data_loader, gamma=0.04,max_lr0=0.0001, epsilon = 0.01
     if get_err:
         dataset = torch.utils.data.TensorDataset(valid_data_x, valid_data_y)
         data_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
-        err=(1.0-exp1.evaluate(model,data_loader))/100
+        err=(1.0-main.evaluate(model,data_loader))/100
 
     return torch.mean(troch.Tensor(rhos)),err
 
@@ -384,136 +387,138 @@ if __name__=='__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=MIN_LR0)
 
     model.init_weights(mean=0.0, std=0.02)
-    exp1.train(model,optimizer,loss_function, train_data_loader,valid_data_loader, \
+    main.train(model,optimizer,loss_function, train_data_loader,valid_data_loader, \
         TRAIN_EPOCH ,min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_erm')
     
     model.init_weights(mean=0.0, std=0.02)
-    exp1.train_FGM(model,optimizer,loss_function, train_data_loader,valid_data_loader, \
+    main.train_FGM(model,optimizer,loss_function, train_data_loader,valid_data_loader, \
         TRAIN_EPOCH ,EPSILON, min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_fgm')
     
     model.init_weights(mean=0.0, std=0.02)
-    exp1.train_IFGM(model,optimizer,loss_function, train_data_loader,valid_data_loader, \
+    main.train_IFGM(model,optimizer,loss_function, train_data_loader,valid_data_loader, \
         TRAIN_EPOCH ,EPSILON, min_lr0=MIN_LR0,alpha=MAX_LR0, min_lr_adjust=False, savepath='mnist_ifgm')
 
     model.init_weights(mean=0.0, std=0.02)
-    exp1.train_WRM(model,optimizer,loss_function, train_data_loader,valid_data_loader, \
+    main.train_WRM(model,optimizer,loss_function, train_data_loader,valid_data_loader, \
         TRAIN_EPOCH , GAMMA, max_lr0=MAX_LR0, min_lr0=MIN_LR0, min_lr_adjust=True, savepath='mnist_wrm')
 
 #%%
 if __name__=='__main__':
     model = Mnist_Estimateur()
-    model, train_hist = exp1.loadCheckpoint(model,'mnist_wrm_ep24')
-    fig = plot_certificate(model,train_hist['loss_maxItr'][-1]+0.05,GAMMA,test_data_loader)    
+    model, train_hist = main.loadCheckpoint(model,'mnist_wrm_ep24')
+    fig = plot_certificate(model,train_hist['loss_maxItr'][-1]+0.05,GAMMA,test_data_loader)  
+      
 #%%
 #test
-if __name__=='__main__':
-    model = Mnist_Estimateur()
-    model,train_hist = exp1.loadCheckpoint(model,'mnist_wrm_ep30')
-    certificate=[] #E_train[phi(theta,z)] + gamma*rho
-    list_rho = []
-    list_worst = []
-    #Rho, loss_maxItr = exp1.cal_worst_case(model,valid_data_loader, GAMMA, 0.04)
-    for rho in range(0,400,50) :
-        rho = rho/100.0
-        certificate.append(train_hist['loss_maxItr'][-1]+0.05+GAMMA*rho)
-    #    certificate.append(loss_maxItr+GAMMA*rho)
+# if __name__=='__main__':
+#     model = Mnist_Estimateur()
+#     model,train_hist = main.loadCheckpoint(model,'mnist_wrm_ep30')
+#     certificate=[] #E_train[phi(theta,z)] + gamma*rho
+#     list_rho = []
+#     list_worst = []
+#     #Rho, loss_maxItr = main.cal_worst_case(model,valid_data_loader, GAMMA, 0.04)
+#     for rho in range(0,400,50) :
+#         rho = rho/100.0
+#         certificate.append(train_hist['loss_maxItr'][-1]+0.05+GAMMA*rho)
+#     #    certificate.append(loss_maxItr+GAMMA*rho)
 
-    for g in [0.07, 0.09, 0.1, 0.12, 0.15, 0.2, 0.3, 0.4, 0.8, 1.2, 2.0, 3.0, 5.0] :
-        print (g)
-        rho, e = exp1.cal_worst_case(model,valid_data_loader, g, 0.04)
-        print (rho, e+rho*g)
-        list_rho.append(rho)
-        list_worst.append(e + rho * g)
+#     for g in [0.07, 0.09, 0.1, 0.12, 0.15, 0.2, 0.3, 0.4, 0.8, 1.2, 2.0, 3.0, 5.0] :
+#         print (g)
+#         rho, e = main.cal_worst_case(model,valid_data_loader, g, 0.04)
+#         print (rho, e+rho*g)
+#         list_rho.append(rho)
+#         list_worst.append(e + rho * g)
 
-    plt.plot(list_rho,list_worst, c='red', label=r"Test worst-case: $\sup_{P:W_c(P,\hat{P}_{test}) \leq \rho } E_P [l(\theta_{WRM};Z)]$")
-    plt.plot(np.array(range(0,400,50))/100.0,certificate,c='blue', label=r"Certificate: $E_{\hat{P}_n}[\phi_{\gamma}(\theta_{WRM};Z)]+\gamma \rho$")
-    plt.xlim([0.0,3.6])
-    plt.ylim([0.0,2.0])
-    plt.xticks([0,0.5,1,1.5,2,2.5,3,3.5])
-    plt.legend()
+#     plt.plot(list_rho,list_worst, c='red', label=r"Test worst-case: $\sup_{P:W_c(P,\hat{P}_{test}) \leq \rho } E_P [l(\theta_{WRM};Z)]$")
+#     plt.plot(np.array(range(0,400,50))/100.0,certificate,c='blue', label=r"Certificate: $E_{\hat{P}_n}[\phi_{\gamma}(\theta_{WRM};Z)]+\gamma \rho$")
+#     plt.xlim([0.0,3.6])
+#     plt.ylim([0.0,2.0])
+#     plt.xticks([0,0.5,1,1.5,2,2.5,3,3.5])
+#     plt.legend()
 
 #%%
 if __name__=='__main__':
     model = Mnist_Estimateur()
     filename = 'mnist_wrm_ep30' #'mnist_wrm_elu_ep42'
-    model,_= exp1.loadCheckpoint(model,filename)
-#    print (exp1.evaluate(model,test_data_loader))
+    model,_= main.loadCheckpoint(model,filename)
+    # print (main.evaluate(model,test_data_loader))
     print (attack_PGM(model,test_data_loader, p=2, epsilon = 0.0, alpha = 0.1))
-#    print('Accuracy on test data: ',exp1.evaluate(mnist_WRM,test_data_loader))
+    print('Accuracy on test data: ',main.evaluate(mnist_WRM,test_data_loader))
         
 #%%
-p=2
-list_errors = []      
-model = Mnist_Estimateur()
+if __name__=='__main__':
+    p=2
+    list_errors = []      
+    model = Mnist_Estimateur()
 
-model,_= exp1.loadCheckpoint(model,'mnist_erm_ep30')
-epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
-list_errors.append(errors)
-exp1.saveCheckpoint(model,list_errors,'mnist_erm_attack_error_list_p2')
-model,_= exp1.loadCheckpoint(model,'mnist_fgm_ep24')
-epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
-list_errors.append(errors)
-exp1.saveCheckpoint(model,list_errors,'mnist_fgm_attack_error_list_p2')
-model,_= exp1.loadCheckpoint(model,'mnist_ifgm_ep27')
-epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
-list_errors.append(errors)
-exp1.saveCheckpoint(model,list_errors,'mnist_ifgm_attack_error_list_p2')
-model,_= exp1.loadCheckpoint(model,'mnist_wrm_ep30')
-epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
-list_errors.append(errors)
-exp1.saveCheckpoint(model,list_errors,'mnist_wrm_attack_error_list_p2')
+    model,_= main.loadCheckpoint(model,'mnist_erm_ep30')
+    epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
+    list_errors.append(errors)
+    main.saveCheckpoint(model,list_errors,'mnist_erm_attack_error_list_p2')
+    model,_= main.loadCheckpoint(model,'mnist_fgm_ep24')
+    epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
+    list_errors.append(errors)
+    main.saveCheckpoint(model,list_errors,'mnist_fgm_attack_error_list_p2')
+    model,_= main.loadCheckpoint(model,'mnist_ifgm_ep27')
+    epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
+    list_errors.append(errors)
+    main.saveCheckpoint(model,list_errors,'mnist_ifgm_attack_error_list_p2')
+    model,_= main.loadCheckpoint(model,'mnist_wrm_ep30')
+    epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
+    list_errors.append(errors)
+    main.saveCheckpoint(model,list_errors,'mnist_wrm_attack_error_list_p2')
 
 
-labels =['ERM','FGM','IFGM','WRM']
-#labels =['IFGM','WRM']
-fig = plot_attack_error(list_errors,labels, p)
+    labels =['ERM','FGM','IFGM','WRM']
+    #labels =['IFGM','WRM']
+    fig = plot_attack_error(list_errors,labels, p)
 
-#array([ 0.0178,  0.0325,  0.0552,  0.0901,  0.1384,  0.203 ,  0.2811,
-#        0.3679,  0.4615,  0.5626,  0.6601,  0.7513,  0.8354,  0.8975])
-#%%
-#epsilon = []
-#epsilon = np.array(range(1,5))/10
-#errors = [0.01,0.02,0.1,1]
-#for e in epsilon :
-#    plt.plot(epsilon, errors)
-#    plt.yticks([0.01,0.1,1.0])
-#    plt.yscale('log')
+    #array([ 0.0178,  0.0325,  0.0552,  0.0901,  0.1384,  0.203 ,  0.2811,
+    #        0.3679,  0.4615,  0.5626,  0.6601,  0.7513,  0.8354,  0.8975])
+
+    #epsilon = []
+    #epsilon = np.array(range(1,5))/10
+    #errors = [0.01,0.02,0.1,1]
+    #for e in epsilon :
+    #    plt.plot(epsilon, errors)
+    #    plt.yticks([0.01,0.1,1.0])
+    #    plt.yscale('log')
 
 
 #%%
 if __name__=='__main__':
     # model = Mnist_Estimateur()
-    # model,_= exp1.loadCheckpoint(model,'mnist_wrm_ep30')
+    # model,_= main.loadCheckpoint(model,'mnist_wrm_ep30')
     list_rhos=[]
     list_errors = []      
 
-    model,_= exp1.loadCheckpoint(model,'mnist_erm_ep30')
+    model,_= main.loadCheckpoint(model,'mnist_erm_ep30')
     gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False,get_err=True)
     list_rhos.append(rhos)
     list_errors.append(errors)
-    exp1.saveCheckpoint(model,list_rhos,'mnist_erm_rho_vs_gamma_list_rhos')
-    exp1.saveCheckpoint(model,list_errors,'mnist_erm_rho_vs_gamma_list_errs')
+    main.saveCheckpoint(model,list_rhos,'mnist_erm_rho_vs_gamma_list_rhos')
+    main.saveCheckpoint(model,list_errors,'mnist_erm_rho_vs_gamma_list_errs')
 
-    model,_= exp1.loadCheckpoint(model,'mnist_fgm_ep24')
+    model,_= main.loadCheckpoint(model,'mnist_fgm_ep24')
     gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False,get_err=True)
     list_rhos.append(rhos)
     list_errors.append(errors)
-    exp1.saveCheckpoint(model,list_rhos,'mnist_fgm_rho_vs_gamma_list_rhos')
-    exp1.saveCheckpoint(model,list_errors,'mnist_fgm_rho_vs_gamma_list_errs')
+    main.saveCheckpoint(model,list_rhos,'mnist_fgm_rho_vs_gamma_list_rhos')
+    main.saveCheckpoint(model,list_errors,'mnist_fgm_rho_vs_gamma_list_errs')
 
-    model,_= exp1.loadCheckpoint(model,'mnist_ifgm_ep27')
+    model,_= main.loadCheckpoint(model,'mnist_ifgm_ep27')
     gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False,get_err=True)
     list_errors.append(rhos)
     list_errors.append(errors)
-    exp1.saveCheckpoint(model,list_rhos,'mnist_ifgm_rho_vs_gamma_list_rhos')
-    exp1.saveCheckpoint(model,list_errors,'mnist_ifgm_rho_vs_gamma_list_errs')
+    main.saveCheckpoint(model,list_rhos,'mnist_ifgm_rho_vs_gamma_list_rhos')
+    main.saveCheckpoint(model,list_errors,'mnist_ifgm_rho_vs_gamma_list_errs')
 
-    model,_= exp1.loadCheckpoint(model,'mnist_wrm_ep30')
+    model,_= main.loadCheckpoint(model,'mnist_wrm_ep30')
     gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False,get_err=True)
     list_rhos.append(rhos)
     list_errors.append(errors)
-    exp1.saveCheckpoint(model,list_rhos,'mnist_wrm_rho_vs_gamma_list_rhos')
-    exp1.saveCheckpoint(model,list_errors,'mnist_wrm_rho_vs_gamma_list_errs')
+    main.saveCheckpoint(model,list_rhos,'mnist_wrm_rho_vs_gamma_list_rhos')
+    main.saveCheckpoint(model,list_errors,'mnist_wrm_rho_vs_gamma_list_errs')
 
     # labels =['ERM','FGM','IFGM','WRM']
     # #labels =['IFGM','WRM']
