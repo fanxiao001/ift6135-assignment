@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Wed May 02 2018 20:09:22 GMT-0400 (EDT)
+# @last-modified Wed May 02 2018 23:47:27 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -27,8 +27,8 @@ import torch.utils.data.sampler as sampler
 import matplotlib.pyplot as plt
 from torch.autograd.gradcheck import zero_gradients
 
-#path="/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/projet/"
-path = "C:\\Users\\lingyu.yue\\Documents\\Xiao_Fan\\project"
+path="/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/projet/"
+# path = "C:\\Users\\lingyu.yue\\Documents\\Xiao_Fan\\project"
 if os.path.isdir(path):
     os.chdir(path)
 else:
@@ -231,18 +231,19 @@ def attack_PGM(model,test_data_loader, p=2, epsilon = 0.01, alpha = 0.1, random=
         valid_data_y[count:count+len(x_)] = y_.clone().cpu()
         count += len(x_)
     dataset = torch.utils.data.TensorDataset(valid_data_x, valid_data_y)
-    data_loader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=True, num_workers=2)
+    data_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
     return exp1.evaluate(model,data_loader)
     
 # WRM attack, return accuracy on test_data_loader
-def attack_WRM(model,test_data_loader, p=2, gamma=0.04, epsilon = 0.01, alpha = 0.1, random=False) :
+def attack_WRM(model,test_data_loader, gamma=0.04,max_lr0=0.0001, epsilon = 0.01, random=False, get_err=False) :
     model.eval()
     T_adv = 15
     loss_function = nn.CrossEntropyLoss()
     valid_data_x = torch.FloatTensor(len(test_data_loader.dataset),1,28,28)
     valid_data_y = torch.LongTensor(len(test_data_loader.dataset))
     count = 0
-    
+    rhos=[]
+    err=0
     for x_, y_ in test_data_loader :
         if USE_CUDA:
             x_, y_ = x_.cuda(), y_.cuda()
@@ -270,17 +271,32 @@ def attack_WRM(model,test_data_loader, p=2, gamma=0.04, epsilon = 0.01, alpha = 
             loss_zt = - ( loss_function(model(z_hat),y_)-  gamma * rho)
             loss_zt.backward()
             optimizer_zt.step()
-            adjust_lr_zt(optimizer_zt,max_lr0, n+1)
+            exp1.adjust_lr_zt(optimizer_zt,max_lr0, n+1)
             
-        valid_data_x[count:count+len(x_),:] = z_hat.data.cpu()
-        valid_data_y[count:count+len(x_)] = y_.clone().cpu()
-        count += len(x_)
-    dataset = torch.utils.data.TensorDataset(valid_data_x, valid_data_y)
-    data_loader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=True, num_workers=2)
-    return exp1.evaluate(model,data_loader)
+        rhos.append(0.1)
+        
+        if get_err:
+            valid_data_x[count:count+len(x_),:] = z_hat.data.cpu()
+            valid_data_y[count:count+len(x_)] = y_.clone().cpu()
+            count += len(x_)
+    if get_err:
+        dataset = torch.utils.data.TensorDataset(valid_data_x, valid_data_y)
+        data_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
+        err=(1.0-exp1.evaluate(model,data_loader))/100
 
-def rho_vs_gamma(model, test_data_loader, gamma) :
-    return None
+    return torch.mean(troch.Tensor(rhos)),err
+
+def rho_vs_gamma(model, test_data_loader, max_lr0, random=False,get_err=False) :
+    C2 = 9.21
+    gammas = np.array(range(5,105,5))/25.0 * C2
+    rhos = []
+    errors = []
+    for g in gammas :
+        rho,err=attack_WRM(model,test_data_loader,float(g),max_lr0, random, get_err)
+        rhos.append(rho)
+        errors.append(err)
+    return np.array(range(5,105,5)),rhos, errors
+
 
 # errors when attacked
 def get_errors(model, test_data_loader, p=2, alpha =0.1, random=False) :
@@ -312,6 +328,22 @@ def plot_attack_error(list_errors,labels, p=2) :
     plt.legend()
     return fig
 
+MIN_LR0 = 0.0001 
+MAX_LR0 = 0.04 #step size for iterative method and attack method
+#number of adversarial iterations
+T_ADV = 15
+
+C2 = 9.21
+Cinf = 1.00
+GAMMA = 0.04 * C2
+EPSILON = 0.45
+
+loss_function=nn.CrossEntropyLoss()
+
+model = Mnist_Estimateur(activation='elu')
+if USE_CUDA:
+    model.cuda()
+
 #def plot_attack_error(models,test_data_loader,labels, p=2) :
 #    fig = plt.figure()
 #    C2 = 9.21
@@ -330,13 +362,8 @@ def plot_attack_error(list_errors,labels, p=2) :
 #    plt.yscale('log')
 #    plt.legend()
 #    return fig
-#%%
-if __name__=='__main__':
-    MIN_LR0 = 0.0001 
-    MAX_LR0 = 0.04 #step size for iterative method and attack method
-    #number of adversarial iterations
-    T_ADV = 15
 
+#%%
 #    C2 = 0
 #    Cinf = 0
 #    count = 0
@@ -350,17 +377,8 @@ if __name__=='__main__':
 #        count += len(x_)
 #    C2 = C2/float(count)
 #    Cinf = Cinf/float(count)
-    C2 = 9.21
-    Cinf = 1.00
-    GAMMA = 0.04 * C2
-    EPSILON = 0.45
-    
-    loss_function=nn.CrossEntropyLoss()
 
-    model = Mnist_Estimateur(activation='elu')
-    if USE_CUDA:
-        model.cuda()
-        
+if __name__=='__main__':
     # optimizer = optim.Adam(model.parameters(), lr=LR0_MIN, betas=(0.5, 0.999))
     # optimizer = optim.RMSprop(model.parameters(), lr=LR0_MIN)
     optimizer = torch.optim.Adam(model.parameters(), lr=MIN_LR0)
@@ -460,3 +478,53 @@ fig = plot_attack_error(list_errors,labels, p)
 #    plt.plot(epsilon, errors)
 #    plt.yticks([0.01,0.1,1.0])
 #    plt.yscale('log')
+
+
+#%%
+if __name__=='__main__':
+    # model = Mnist_Estimateur()
+    # model,_= exp1.loadCheckpoint(model,'mnist_wrm_ep30')
+    list_rhos=[]
+    list_errors = []      
+
+    model,_= exp1.loadCheckpoint(model,'mnist_erm_ep30')
+    gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False,get_err=True)
+    list_rhos.append(rhos)
+    list_errors.append(errors)
+    exp1.saveCheckpoint(model,list_rhos,'mnist_erm_rho_vs_gamma_list_rhos')
+    exp1.saveCheckpoint(model,list_errors,'mnist_erm_rho_vs_gamma_list_errs')
+
+    model,_= exp1.loadCheckpoint(model,'mnist_fgm_ep24')
+    gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False,get_err=True)
+    list_rhos.append(rhos)
+    list_errors.append(errors)
+    exp1.saveCheckpoint(model,list_rhos,'mnist_fgm_rho_vs_gamma_list_rhos')
+    exp1.saveCheckpoint(model,list_errors,'mnist_fgm_rho_vs_gamma_list_errs')
+
+    model,_= exp1.loadCheckpoint(model,'mnist_ifgm_ep27')
+    gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False,get_err=True)
+    list_errors.append(rhos)
+    list_errors.append(errors)
+    exp1.saveCheckpoint(model,list_rhos,'mnist_ifgm_rho_vs_gamma_list_rhos')
+    exp1.saveCheckpoint(model,list_errors,'mnist_ifgm_rho_vs_gamma_list_errs')
+
+    model,_= exp1.loadCheckpoint(model,'mnist_wrm_ep30')
+    gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False,get_err=True)
+    list_rhos.append(rhos)
+    list_errors.append(errors)
+    exp1.saveCheckpoint(model,list_rhos,'mnist_wrm_rho_vs_gamma_list_rhos')
+    exp1.saveCheckpoint(model,list_errors,'mnist_wrm_rho_vs_gamma_list_errs')
+
+    # labels =['ERM','FGM','IFGM','WRM']
+    # #labels =['IFGM','WRM']
+    # fig = plot_attack_error(list_rho,labels, p)
+
+    # plt.plot(gammas,rhos)
+    # plt.xlim([0,100])
+    # plt.ylim([0.0,1e4])
+    # plt.xticks([25,50])
+    # plt.xlabel(r"$C_{2}/\gamma_{adv}$")
+    # plt.ylabel(r"$\hat\rho_{test}$")
+    # plt.title(r"$\hat\rho_{test}$ vs. $1/\gamma_{adv}$")
+
+    # plt.legend()
