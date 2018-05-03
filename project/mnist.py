@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Thu May 03 2018 00:29:14 GMT-0400 (EDT)
+# @last-modified Thu May 03 2018 00:51:01 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -459,11 +459,11 @@ if __name__=='__main__':
     epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
     list_errors.append(errors)
     main.saveCheckpoint(model,list_errors,'mnist_fgm_attack_error_list_p2')
-    model,_= main.loadCheckpoint(model,'mnist_ifgm_ep27')
+    model,_= main.loadCheckpoint(model,'mnist_ifgm_ep27') #xiao27 louis30
     epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
     list_errors.append(errors)
     main.saveCheckpoint(model,list_errors,'mnist_ifgm_attack_error_list_p2')
-    model,_= main.loadCheckpoint(model,'mnist_wrm_ep30')
+    model,_= main.loadCheckpoint(model,'mnist_wrm_ep30') #xiao30 louis27
     epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
     list_errors.append(errors)
     main.saveCheckpoint(model,list_errors,'mnist_wrm_attack_error_list_p2')
@@ -506,14 +506,14 @@ if __name__=='__main__':
     main.saveCheckpoint(model,list_rhos,'mnist_fgm_rho_vs_gamma_list_rhos')
     main.saveCheckpoint(model,list_errors,'mnist_fgm_rho_vs_gamma_list_errs')
 
-    model,_= main.loadCheckpoint(model,'mnist_ifgm_ep27')
+    model,_= main.loadCheckpoint(model,'mnist_ifgm_ep30') #xiao27 louis30
     gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False, get_err=True)
     list_errors.append(rhos)
     list_errors.append(errors)
     main.saveCheckpoint(model,list_rhos,'mnist_ifgm_rho_vs_gamma_list_rhos')
     main.saveCheckpoint(model,list_errors,'mnist_ifgm_rho_vs_gamma_list_errs')
 
-    model,_= main.loadCheckpoint(model,'mnist_wrm_ep30')
+    model,_= main.loadCheckpoint(model,'mnist_wrm_ep27') #xiao30 louis27
     gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False, get_err=True)
     list_rhos.append(rhos)
     list_errors.append(errors)
