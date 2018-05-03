@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Wed May 02 2018 20:05:58 GMT-0400 (EDT)
+# @last-modified Wed May 02 2018 20:09:22 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -233,9 +233,9 @@ def attack_PGM(model,test_data_loader, p=2, epsilon = 0.01, alpha = 0.1, random=
     dataset = torch.utils.data.TensorDataset(valid_data_x, valid_data_y)
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=True, num_workers=2)
     return exp1.evaluate(model,data_loader)
-
+    
 # WRM attack, return accuracy on test_data_loader
-def attack_WRM(model,test_data_loader, p=2, gamma, epsilon = 0.01, alpha = 0.1, random=False) :
+def attack_WRM(model,test_data_loader, p=2, gamma=0.04, epsilon = 0.01, alpha = 0.1, random=False) :
     model.eval()
     T_adv = 15
     loss_function = nn.CrossEntropyLoss()
