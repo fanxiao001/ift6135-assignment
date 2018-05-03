@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Thu May 03 2018 00:14:35 GMT-0400 (EDT)
+# @last-modified Thu May 03 2018 00:29:14 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -235,7 +235,7 @@ def attack_PGM(model,test_data_loader, p=2, epsilon = 0.01, alpha = 0.1, random=
     return main.evaluate(model,data_loader)
     
 # WRM attack, return accuracy on test_data_loader
-def attack_WRM(model,test_data_loader, gamma=0.04,max_lr0=0.0001, epsilon = 0.01, random=False, get_err=False) :
+def attack_WRM(model,test_data_loader, gamma=0.04, max_lr0=0.0001, epsilon = 0.01, random=False, get_err=False) :
     model.eval()
     T_adv = 15
     loss_function = nn.CrossEntropyLoss()
@@ -260,7 +260,7 @@ def attack_WRM(model,test_data_loader, gamma=0.04,max_lr0=0.0001, epsilon = 0.01
             noise = torch.FloatTensor(x_.size()).uniform_(-epsilon, epsilon)
             if USE_CUDA : 
                 noise = noise.cuda()
-            z_hat.data += noise
+            z_hat += noise
             
         z_hat = Variable(z_hat,requires_grad=True)
         #running the maximizer for z_hat
@@ -279,7 +279,7 @@ def attack_WRM(model,test_data_loader, gamma=0.04,max_lr0=0.0001, epsilon = 0.01
         rhos.append(0.1)
         
         if get_err:
-            valid_data_x[count:count+len(x_),:] = z_hat.data.cpu()
+            valid_data_x[count:count+len(x_),:] = z_hat.cpu()
             valid_data_y[count:count+len(x_)] = y_.clone().cpu()
             count += len(x_)
     if get_err:
@@ -287,9 +287,9 @@ def attack_WRM(model,test_data_loader, gamma=0.04,max_lr0=0.0001, epsilon = 0.01
         data_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
         err=(1.0-main.evaluate(model,data_loader))/100
 
-    return torch.mean(troch.Tensor(rhos)),err
+    return torch.mean(torch.Tensor(rhos)),err
 
-def rho_vs_gamma(model, test_data_loader, max_lr0, random=False,get_err=False) :
+def rho_vs_gamma(model, test_data_loader, max_lr0, random=False, get_err=False) :
     C2 = 9.21
     gammas = np.array(range(5,105,5))/25.0 * C2
     rhos = []
@@ -493,28 +493,28 @@ if __name__=='__main__':
     list_errors = []      
 
     model,_= main.loadCheckpoint(model,'mnist_erm_ep30')
-    gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False,get_err=True)
+    gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False, get_err=True)
     list_rhos.append(rhos)
     list_errors.append(errors)
     main.saveCheckpoint(model,list_rhos,'mnist_erm_rho_vs_gamma_list_rhos')
     main.saveCheckpoint(model,list_errors,'mnist_erm_rho_vs_gamma_list_errs')
 
     model,_= main.loadCheckpoint(model,'mnist_fgm_ep24')
-    gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False,get_err=True)
+    gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False, get_err=True)
     list_rhos.append(rhos)
     list_errors.append(errors)
     main.saveCheckpoint(model,list_rhos,'mnist_fgm_rho_vs_gamma_list_rhos')
     main.saveCheckpoint(model,list_errors,'mnist_fgm_rho_vs_gamma_list_errs')
 
     model,_= main.loadCheckpoint(model,'mnist_ifgm_ep27')
-    gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False,get_err=True)
+    gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False, get_err=True)
     list_errors.append(rhos)
     list_errors.append(errors)
     main.saveCheckpoint(model,list_rhos,'mnist_ifgm_rho_vs_gamma_list_rhos')
     main.saveCheckpoint(model,list_errors,'mnist_ifgm_rho_vs_gamma_list_errs')
 
     model,_= main.loadCheckpoint(model,'mnist_wrm_ep30')
-    gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False,get_err=True)
+    gammas, rhos, errors = rho_vs_gamma(model, test_data_loader, MAX_LR0, random=False, get_err=True)
     list_rhos.append(rhos)
     list_errors.append(errors)
     main.saveCheckpoint(model,list_rhos,'mnist_wrm_rho_vs_gamma_list_rhos')
