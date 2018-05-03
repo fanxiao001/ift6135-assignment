@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Wed May 02 2018 14:37:34 GMT-0400 (EDT)
+# @last-modified Wed May 02 2018 20:05:58 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -64,6 +64,12 @@ valid_data_loader = torch.utils.data.DataLoader(
     mnist_train, batch_size=BATCH_SIZE,  sampler=valid_sampler, num_workers=10)
 test_data_loader = torch.utils.data.DataLoader(mnist_test, batch_size=BATCH_SIZE, shuffle=True, num_workers=10)
 print('Loaded MNIST data, total',len(mnist_train)+len(mnist_test))
+
+normlist=[]
+for x,_ in train_data_loader:
+    x=x.view(len(x),-1)
+    normlist.append(torch.mean(torch.norm(x,2,1)))
+print('Mean of Mnist norm (C2) =',torch.mean(torch.Tensor(normlist)))
 
 #%%
 '''
@@ -228,6 +234,54 @@ def attack_PGM(model,test_data_loader, p=2, epsilon = 0.01, alpha = 0.1, random=
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=True, num_workers=2)
     return exp1.evaluate(model,data_loader)
 
+# WRM attack, return accuracy on test_data_loader
+def attack_WRM(model,test_data_loader, p=2, gamma, epsilon = 0.01, alpha = 0.1, random=False) :
+    model.eval()
+    T_adv = 15
+    loss_function = nn.CrossEntropyLoss()
+    valid_data_x = torch.FloatTensor(len(test_data_loader.dataset),1,28,28)
+    valid_data_y = torch.LongTensor(len(test_data_loader.dataset))
+    count = 0
+    
+    for x_, y_ in test_data_loader :
+        if USE_CUDA:
+            x_, y_ = x_.cuda(), y_.cuda()
+        x_, y_  = Variable(x_), Variable(y_)
+
+        #initialize z_hat with x_
+        z_hat = x_.data.clone()
+        if USE_CUDA:
+            z_hat = z_hat.cuda()
+        if random == True : 
+            noise = torch.FloatTensor(x_.size()).uniform_(-epsilon, epsilon)
+            if USE_CUDA : 
+                noise = noise.cuda()
+            z_hat.data += noise
+            
+        z_hat = Variable(z_hat,requires_grad=True)
+        #running the maximizer for z_hat
+        optimizer_zt = torch.optim.Adam([z_hat], lr=max_lr0)
+        loss_zt = 0 # phi(theta,z0)
+        rho = 0 #E[c(Z,Z0)]
+        for n in range(1,T_adv+1) :
+            optimizer_zt.zero_grad()
+            delta = z_hat - x_
+            rho = torch.mean((torch.norm(delta.view(len(x_),-1),2,1)**2)) 
+            loss_zt = - ( loss_function(model(z_hat),y_)-  gamma * rho)
+            loss_zt.backward()
+            optimizer_zt.step()
+            adjust_lr_zt(optimizer_zt,max_lr0, n+1)
+            
+        valid_data_x[count:count+len(x_),:] = z_hat.data.cpu()
+        valid_data_y[count:count+len(x_)] = y_.clone().cpu()
+        count += len(x_)
+    dataset = torch.utils.data.TensorDataset(valid_data_x, valid_data_y)
+    data_loader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=True, num_workers=2)
+    return exp1.evaluate(model,data_loader)
+
+def rho_vs_gamma(model, test_data_loader, gamma) :
+    return None
+
 # errors when attacked
 def get_errors(model, test_data_loader, p=2, alpha =0.1, random=False) :
     C2 = 9.21
@@ -303,57 +357,63 @@ if __name__=='__main__':
     
     loss_function=nn.CrossEntropyLoss()
 
-    mnist_WRM = Mnist_Estimateur(activation='elu')
-
+    model = Mnist_Estimateur(activation='elu')
     if USE_CUDA:
-        mnist_WRM.cuda()
-    mnist_WRM.init_weights(mean=0.0, std=0.02)
-    # optimizer = optim.Adam(mnist_WRM.parameters(), lr=LR0_MIN, betas=(0.5, 0.999))
-    # optimizer = optim.RMSprop(mnist_WRM.parameters(), lr=LR0_MIN)
-    optimizer = torch.optim.Adam(mnist_WRM.parameters(), lr=MIN_LR0)
+        model.cuda()
+        
+    # optimizer = optim.Adam(model.parameters(), lr=LR0_MIN, betas=(0.5, 0.999))
+    # optimizer = optim.RMSprop(model.parameters(), lr=LR0_MIN)
+    optimizer = torch.optim.Adam(model.parameters(), lr=MIN_LR0)
 
-#    exp1.train(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
-#         TRAIN_EPOCH ,min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_erm')
+    model.init_weights(mean=0.0, std=0.02)
+    exp1.train(model,optimizer,loss_function, train_data_loader,valid_data_loader, \
+        TRAIN_EPOCH ,min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_erm')
     
-#    exp1.train_FGM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
-#         TRAIN_EPOCH ,EPSILON, min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_fgm')
+    model.init_weights(mean=0.0, std=0.02)
+    exp1.train_FGM(model,optimizer,loss_function, train_data_loader,valid_data_loader, \
+        TRAIN_EPOCH ,EPSILON, min_lr0=MIN_LR0,min_lr_adjust=False, savepath='mnist_fgm')
     
-    exp1.train_IFGM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
-         TRAIN_EPOCH ,EPSILON, min_lr0=MIN_LR0,alpha=MAX_LR0, min_lr_adjust=False, savepath='mnist_ifgm')
+    model.init_weights(mean=0.0, std=0.02)
+    exp1.train_IFGM(model,optimizer,loss_function, train_data_loader,valid_data_loader, \
+        TRAIN_EPOCH ,EPSILON, min_lr0=MIN_LR0,alpha=MAX_LR0, min_lr_adjust=False, savepath='mnist_ifgm')
 
-#    exp1.train_WRM(mnist_WRM,optimizer,loss_function, train_data_loader,valid_data_loader, \
-#        TRAIN_EPOCH , GAMMA, max_lr0=MAX_LR0, min_lr0=MIN_LR0, min_lr_adjust=True, savepath='mnist_wrm')
-   
+    model.init_weights(mean=0.0, std=0.02)
+    exp1.train_WRM(model,optimizer,loss_function, train_data_loader,valid_data_loader, \
+        TRAIN_EPOCH , GAMMA, max_lr0=MAX_LR0, min_lr0=MIN_LR0, min_lr_adjust=True, savepath='mnist_wrm')
+
 #%%
 if __name__=='__main__':
     model = Mnist_Estimateur()
     model, train_hist = exp1.loadCheckpoint(model,'mnist_wrm_ep24')
     fig = plot_certificate(model,train_hist['loss_maxItr'][-1]+0.05,GAMMA,test_data_loader)    
 #%%
-model = Mnist_Estimateur()
-model,train_hist = exp1.loadCheckpoint(model,'mnist_wrm_ep30')
-certificate=[] #E_train[phi(theta,z)] + gamma*rho
-list_rho = []
-list_worst = []
-#Rho, loss_maxItr = exp1.cal_worst_case(model,valid_data_loader, GAMMA, 0.04)
-for rho in range(0,400,50) :
-    rho = rho/100.0
-    certificate.append(train_hist['loss_maxItr'][-1]+0.05+GAMMA*rho)
-#    certificate.append(loss_maxItr+GAMMA*rho)
+#test
+if __name__=='__main__':
+    model = Mnist_Estimateur()
+    model,train_hist = exp1.loadCheckpoint(model,'mnist_wrm_ep30')
+    certificate=[] #E_train[phi(theta,z)] + gamma*rho
+    list_rho = []
+    list_worst = []
+    #Rho, loss_maxItr = exp1.cal_worst_case(model,valid_data_loader, GAMMA, 0.04)
+    for rho in range(0,400,50) :
+        rho = rho/100.0
+        certificate.append(train_hist['loss_maxItr'][-1]+0.05+GAMMA*rho)
+    #    certificate.append(loss_maxItr+GAMMA*rho)
 
-for g in [0.07, 0.09, 0.1, 0.12, 0.15, 0.2, 0.3, 0.4, 0.8, 1.2, 2.0, 3.0, 5.0] :
-    print (g)
-    rho, e = exp1.cal_worst_case(model,valid_data_loader, g, 0.04)
-    print (rho, e+rho*g)
-    list_rho.append(rho)
-    list_worst.append(e + rho * g)
+    for g in [0.07, 0.09, 0.1, 0.12, 0.15, 0.2, 0.3, 0.4, 0.8, 1.2, 2.0, 3.0, 5.0] :
+        print (g)
+        rho, e = exp1.cal_worst_case(model,valid_data_loader, g, 0.04)
+        print (rho, e+rho*g)
+        list_rho.append(rho)
+        list_worst.append(e + rho * g)
 
-plt.plot(list_rho,list_worst, c='red', label=r"Test worst-case: $\sup_{P:W_c(P,\hat{P}_{test}) \leq \rho } E_P [l(\theta_{WRM};Z)]$")
-plt.plot(np.array(range(0,400,50))/100.0,certificate,c='blue', label=r"Certificate: $E_{\hat{P}_n}[\phi_{\gamma}(\theta_{WRM};Z)]+\gamma \rho$")
-plt.xlim([0.0,3.6])
-plt.ylim([0.0,2.0])
-plt.xticks([0,0.5,1,1.5,2,2.5,3,3.5])
-plt.legend()
+    plt.plot(list_rho,list_worst, c='red', label=r"Test worst-case: $\sup_{P:W_c(P,\hat{P}_{test}) \leq \rho } E_P [l(\theta_{WRM};Z)]$")
+    plt.plot(np.array(range(0,400,50))/100.0,certificate,c='blue', label=r"Certificate: $E_{\hat{P}_n}[\phi_{\gamma}(\theta_{WRM};Z)]+\gamma \rho$")
+    plt.xlim([0.0,3.6])
+    plt.ylim([0.0,2.0])
+    plt.xticks([0,0.5,1,1.5,2,2.5,3,3.5])
+    plt.legend()
+
 #%%
 if __name__=='__main__':
     model = Mnist_Estimateur()
@@ -367,18 +427,25 @@ if __name__=='__main__':
 p=2
 list_errors = []      
 model = Mnist_Estimateur()
+
 model,_= exp1.loadCheckpoint(model,'mnist_erm_ep30')
 epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
 list_errors.append(errors)
+exp1.saveCheckpoint(model,list_errors,'mnist_erm_attack_error_list_p2')
 model,_= exp1.loadCheckpoint(model,'mnist_fgm_ep24')
 epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
 list_errors.append(errors)
+exp1.saveCheckpoint(model,list_errors,'mnist_fgm_attack_error_list_p2')
 model,_= exp1.loadCheckpoint(model,'mnist_ifgm_ep27')
 epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
 list_errors.append(errors)
+exp1.saveCheckpoint(model,list_errors,'mnist_ifgm_attack_error_list_p2')
 model,_= exp1.loadCheckpoint(model,'mnist_wrm_ep30')
 epsilons, errors = get_errors(model, test_data_loader, p, alpha = MAX_LR0, random=False)
 list_errors.append(errors)
+exp1.saveCheckpoint(model,list_errors,'mnist_wrm_attack_error_list_p2')
+
+
 labels =['ERM','FGM','IFGM','WRM']
 #labels =['IFGM','WRM']
 fig = plot_attack_error(list_errors,labels, p)

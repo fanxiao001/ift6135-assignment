@@ -534,6 +534,14 @@ init_seed()
 train_x, train_y = synthetic_data(10000)
 valid_x, valid_y = synthetic_data(4000)
 
+path="/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/projet/"
+# path = "C:\\Users\\lingyu.yue\\Documents\\Xiao_Fan\\project"
+if os.path.isdir(path):
+    os.chdir(path)
+else:
+    os.chdir("./")
+print(os.getcwd())
+
 #%%
 if __name__=='__main__':
     
@@ -601,7 +609,7 @@ if __name__=='__main__':
     # plotGraph([net_temp,net_temp,net_temp,net_IFGM],train_x, train_y)
     labels = ['ERM','FGM','WRM','IFGM']
     fig = plotGraph([net_ERM,net_FGM,net_WRM,net_IFGM],train_x, train_y, labels)
-#    fig.savefig('fig1-relu.pdf')
+    fig.savefig('fig1-elu.pdf')
 
 #%%
 if __name__=='__main__':
@@ -610,7 +618,7 @@ if __name__=='__main__':
     net_WRM, train_hist = loadCheckpoint(model,'syn_WRM_ep30')
     fig = plot_certificate(net_WRM,train_hist['loss_maxItr'][-1],GAMMA,valid_data_loader,MAX_LR0)
     fig.legend()
-#    fig.savefig('fig2-syn.pdf')
+    fig.savefig('fig2-syn.pdf')
 #%%
 #certificate=[] #E_train[phi(theta,z)] + gamma*rho
 #list_rho = []
