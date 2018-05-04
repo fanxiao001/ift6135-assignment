@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Thu May 03 2018 14:23:49 GMT-0400 (EDT)
+# @last-modified Thu May 03 2018 23:51:22 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -26,6 +26,7 @@ import torchvision.transforms
 import torch.utils.data.sampler as sampler
 import matplotlib.pyplot as plt
 from torch.autograd.gradcheck import zero_gradients
+import itertools
 
 path="/Users/louis/Google Drive/M.Sc-DIRO-UdeM/IFT6135-Apprentissage de représentations/projet/"
 # path = "C:\\Users\\lingyu.yue\\Documents\\Xiao_Fan\\project"
@@ -46,30 +47,31 @@ TRAIN_DATA_SIZE = 50000
 TRAIN_EPOCH = 30 #10000
 BATCH_SIZE = 128
 
+#%%
+if True and __name__=='__main__':
+    '''
+    Load MNIST data
+    '''
+    mnist_transforms = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
+    mnist_train = torchvision.datasets.MNIST(root='./data', train=True, transform=mnist_transforms, download=True)
+    mnist_test = torchvision.datasets.MNIST(root='./data', train=False, transform=mnist_transforms, download=True)
+    indices = list(range(len(mnist_train)))
+    np.random.shuffle(indices)
+    train_idx, valid_idx = indices[:TRAIN_DATA_SIZE], indices[TRAIN_DATA_SIZE:]
+    train_sampler = sampler.SubsetRandomSampler(train_idx)
+    valid_sampler = sampler.SubsetRandomSampler(valid_idx)
+    train_data_loader = torch.utils.data.DataLoader(
+        mnist_train, batch_size=BATCH_SIZE, sampler=train_sampler, num_workers=10)
+    valid_data_loader = torch.utils.data.DataLoader(
+        mnist_train, batch_size=BATCH_SIZE,  sampler=valid_sampler, num_workers=10)
+    test_data_loader = torch.utils.data.DataLoader(mnist_test, batch_size=BATCH_SIZE, shuffle=True, num_workers=10)
+    print('Loaded MNIST data, total',len(mnist_train)+len(mnist_test))
 
-'''
-Load MNIST data
-'''
-mnist_transforms = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
-mnist_train = torchvision.datasets.MNIST(root='./data', train=True, transform=mnist_transforms, download=True)
-mnist_test = torchvision.datasets.MNIST(root='./data', train=False, transform=mnist_transforms, download=True)
-indices = list(range(len(mnist_train)))
-np.random.shuffle(indices)
-train_idx, valid_idx = indices[:TRAIN_DATA_SIZE], indices[TRAIN_DATA_SIZE:]
-train_sampler = sampler.SubsetRandomSampler(train_idx)
-valid_sampler = sampler.SubsetRandomSampler(valid_idx)
-train_data_loader = torch.utils.data.DataLoader(
-    mnist_train, batch_size=BATCH_SIZE, sampler=train_sampler, num_workers=10)
-valid_data_loader = torch.utils.data.DataLoader(
-    mnist_train, batch_size=BATCH_SIZE,  sampler=valid_sampler, num_workers=10)
-test_data_loader = torch.utils.data.DataLoader(mnist_test, batch_size=BATCH_SIZE, shuffle=True, num_workers=10)
-print('Loaded MNIST data, total',len(mnist_train)+len(mnist_test))
-
-normlist=[]
-for x,_ in train_data_loader:
-    x=x.view(len(x),-1)
-    normlist.append(torch.mean(torch.norm(x,2,1)))
-print('Mean of Mnist norm (C2) =',torch.mean(torch.Tensor(normlist)))
+    normlist=[]
+    for x,_ in train_data_loader:
+        x=x.view(len(x),-1)
+        normlist.append(torch.mean(torch.norm(x,2,1)))
+    print('Mean of Mnist norm (C2) =',torch.mean(torch.Tensor(normlist)))
 
 #%%
 '''
@@ -234,8 +236,38 @@ def attack_PGM(model,test_data_loader, p=2, epsilon = 0.01, alpha = 0.1, random=
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
     return main.evaluate(model,data_loader)
     
+# errors when attacked
+def get_errors(model, test_data_loader, p=2, alpha =0.1, random=False) :
+    C2 = 9.21
+    Cinf =  1.0
+    epsilons = np.array(range(0,22,2))/100.0 * Cinf
+    if p==2  :
+        epsilons = np.array(range(0,27,2))/100.0 * C2
+    errors = []
+    for e in epsilons :
+        errors.append(1.0-attack_PGM(model,test_data_loader,p,float(e), alpha, random)/100.0)
+    return epsilons, errors
+
+def plot_attack_error(list_errors,labels, p=2) :
+    fig = plt.figure()
+    epsilons = np.array(range(0,22,2))/100.0 
+    plt.xlabel(r"$\epsilon_{adv}/C_{\infty}$") 
+    plt.xticks([0,0.05,0.1,0.15,0.2])
+    if p==2  :
+        epsilons = np.array(range(0,27,2))/100.0 
+        plt.xlabel(r"$\epsilon_{adv}/C_2$")
+        plt.xticks([0,0.05,0.1,0.15,0.2,0.25])
+    
+    for i, errors in enumerate(list_errors) :
+        plt.plot(epsilons, errors, label=labels[i])
+    plt.ylabel('Error')
+    plt.yscale('log')
+    plt.yticks([0.01,0.1,1.0])
+    plt.legend()
+    return fig
+
 # WRM attack, return accuracy on test_data_loader
-def attack_WRM(model,test_data_loader, gamma=0.04, max_lr0=0.0001, epsilon = 0.01, random=False, get_err=False) :
+def attack_WRM(model,test_data_loader, gamma, max_lr0, epsilon = 0.01, random=False, get_err=False) :
     model.eval()
     T_adv = 15
     loss_function = nn.CrossEntropyLoss()
@@ -279,107 +311,148 @@ def attack_WRM(model,test_data_loader, gamma=0.04, max_lr0=0.0001, epsilon = 0.0
         rhos.append(rho.data[0])
         
         if get_err:
-            valid_data_x[count:count+len(x_),:] = z_hat.cpu()
-            valid_data_y[count:count+len(x_)] = y_.clone().cpu()
+            valid_data_x[count:count+len(x_),:] = z_hat.data.cpu()
+            valid_data_y[count:count+len(x_)] = y_.data.cpu()
             count += len(x_)
     if get_err:
         dataset = torch.utils.data.TensorDataset(valid_data_x, valid_data_y)
         data_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
-        err=(1.0-main.evaluate(model,data_loader))/100
+        err=1.0-main.evaluate(model,data_loader)/100
 
     return torch.mean(torch.FloatTensor(rhos)),err
-
-# WRM attack, return accuracy on test_data_loader
-def attack_WRM_sample(model,test_data_loader, gamma=0.04, max_lr0=0.0001, epsilon = 0.01, random=False, get_err=False) :
-    model.eval()
-    loss_function = nn.CrossEntropyLoss()
-    
-    if get_err:
-        valid_data_x = torch.FloatTensor(len(test_data_loader.dataset),1,28,28)
-        valid_data_y = torch.LongTensor(len(test_data_loader.dataset))
-    
-    for x_, y_ in test_data_loader :
-        # if y_
-
-        if USE_CUDA:
-            x_, y_ = x_.cuda(), y_.cuda()
-        x_, y_  = Variable(x_), Variable(y_)
-
-    # #initialize z_hat with x_
-    # z_hat = x_.data.clone()
-    # if USE_CUDA:
-    #     z_hat = z_hat.cuda()
-    # if random : 
-    #     noise = torch.FloatTensor(x_.size()).uniform_(-epsilon, epsilon)
-    #     if USE_CUDA : 
-    #         noise = noise.cuda()
-    #     z_hat += noise
-        
-    # z_hat = Variable(z_hat,requires_grad=True)
-    # #running the maximizer for z_hat
-    # optimizer_zt = torch.optim.Adam([z_hat], lr=max_lr0)
-    # loss_zt = 0 # phi(theta,z0)
-    # rho = 0 #E[c(Z,Z0)]
-    # for n in range(1,T_adv+1) :
-    #     optimizer_zt.zero_grad()
-    #     delta = z_hat - x_
-    #     rho = torch.mean((torch.norm(delta.view(len(x_),-1),2,1)**2)) 
-    #     loss_zt = - ( loss_function(model(z_hat),y_)-  gamma * rho)
-    #     loss_zt.backward()
-    #     optimizer_zt.step()
-    #     main.adjust_lr_zt(optimizer_zt,max_lr0, n+1)
-        
-    # rhos.append(rho.data[0])
-        
-
-    return 1
 
 def rho_vs_gamma(model, test_data_loader, max_lr0, random=False, get_err=False) :
     C2 = 9.21
     gammas = C2/np.array(range(5,105,5))  #0.5-0.01 
-    print (gammas)
+    # print (gammas)
     rhos = []
     errors = []
     for g in gammas :
-        # print(float(g))
-        rho,err=attack_WRM(model,test_data_loader,float(g),max_lr0, random, get_err)
+        rho,err=attack_WRM(model,test_data_loader,float(g),max_lr0, epsilon = 0.01, random=random, get_err=get_err)
         rhos.append(rho)
         errors.append(err)
     return np.array(range(5,105,5)),rhos, errors
 
+# get 0-9 samples after WRM attack
+def attack_WRM_sample(model,x_list, gammas, max_lr0) :
+    model.eval()
+    loss_function = nn.CrossEntropyLoss()
+    T_adv = 15
 
-# errors when attacked
-def get_errors(model, test_data_loader, p=2, alpha =0.1, random=False) :
-    C2 = 9.21
-    Cinf =  1.0
-    epsilons = np.array(range(0,22,2))/100.0 * Cinf
-    if p==2  :
-        epsilons = np.array(range(0,27,2))/100.0 * C2
-    errors = []
-    for e in epsilons :
-        errors.append(1.0-attack_PGM(model,test_data_loader,p,float(e), alpha, random)/100.0)
-    return epsilons, errors
+    z_list=[]
+    preds=[]
+    for i,x_ in enumerate(x_list):
+        x_=x_.unsqueeze(0)
+        y_=torch.LongTensor([i])
+        if USE_CUDA:
+            x_, y_ = x_.cuda(), y_.cuda()
+        x_, y_  = Variable(x_), Variable(y_)
 
-def plot_attack_error(list_errors,labels, p=2) :
-    fig = plt.figure()
-    epsilons = np.array(range(0,22,2))/100.0 
-    plt.xlabel(r"$\epsilon_{adv}/C_{\infty}$") 
-    plt.xticks([0,0.05,0.1,0.15,0.2])
-    if p==2  :
-        epsilons = np.array(range(0,27,2))/100.0 
-        plt.xlabel(r"$\epsilon_{adv}/C_2$")
-        plt.xticks([0,0.05,0.1,0.15,0.2,0.25])
+
+        for g in gammas:
+            #initialize z_hat with x_
+            z_hat = x_.data.clone()
+            if USE_CUDA:
+                z_hat = z_hat.cuda()
+            losses=[]
+            rhos=[]
+            z_hat = Variable(z_hat,requires_grad=True)
+            #running the maximizer for z_hat
+            optimizer_zt = torch.optim.Adam([z_hat], lr=max_lr0)
+            loss_zt = 0 # phi(theta,z0)
+            rho = 0 #E[c(Z,Z0)]
+            for n in range(1,T_adv+1) :
+                out=model(z_hat)
+                _, pred = torch.max(out, 1)
+                if pred!=i:
+                    preds.append(pred)
+                    z_list.append(z_hat.squeeze(0).data.cpu())
+                    break
+
+                optimizer_zt.zero_grad()
+                delta = z_hat - x_
+                # print(delta.size(),delta.view(-1).size())
+                rho = torch.norm(delta.view(-1))**2
+                loss=loss_function(out,y_)
+                losses.append(loss.data[0].numpy())
+                rhos.append(rho.data[0].numpy())
+                loss_zt = - ( loss -  float(g) * rho)
+                loss_zt.backward()
+                optimizer_zt.step()
+                main.adjust_lr_zt(optimizer_zt,max_lr0, n+1)
+
+            if pred!=i:
+                break
+            elif g==gammas[-1]:
+                preds.append(pred)
+                z_list.append(z_hat.squeeze(0).data.cpu())
+                # print('LOSS',losses[-1])
+                # print('RHO',rhos[-1])
+
+        print('digit=',i,'pred=',pred[0].numpy(),'loop=',n,'gamma=',g)
+
+    return preds,z_list
+
+def show_samples(data_loader, gammas, max_lr0, path = 'result.png'):
     
-    for i, errors in enumerate(list_errors) :
-        plt.plot(epsilons, errors, label=labels[i])
-    plt.ylabel('Error')
-    plt.yscale('log')
-    plt.yticks([0.01,0.1,1.0])
-    plt.legend()
-    return fig
+    preds_list=[]
+    z_list=[]
+
+    x_list=[]
+    for xs_, ys_ in data_loader :
+        for i in range(10):
+            for x, y in zip( xs_, ys_ ):
+                if y==i:
+                    x_list.append(x)
+                    break
+        break
+    
+    preds_list.append(range(10))
+    z_list.append(x_list)
+
+    model = Mnist_Estimateur(activation='elu')
+    model,_= main.loadCheckpoint(model,'mnist_erm_ep30')
+    preds, z_ = attack_WRM_sample(model, x_list, gammas, max_lr0)
+    preds_list.append(preds)
+    z_list.append(z_)
+    
+    model,_= main.loadCheckpoint(model,'mnist_fgm_ep24')
+    preds, z_ = attack_WRM_sample(model, x_list, gammas, max_lr0)
+    preds_list.append(preds)
+    z_list.append(z_)
+    
+    model,_= main.loadCheckpoint(model,'mnist_ifgm_ep30')
+    preds, z_ = attack_WRM_sample(model, x_list, gammas, max_lr0)
+    preds_list.append(preds)
+    z_list.append(z_)
+    
+    model,_= main.loadCheckpoint(model,'mnist_wrm_ep27')
+    preds, z_ = attack_WRM_sample(model, x_list, gammas, max_lr0)
+    preds_list.append(preds)
+    z_list.append(z_)
+    
+    
+    size_y= 10
+    size_x = 5
+    fig, ax = plt.subplots(size_y, size_x, figsize=(10, 20))
+    for i, j in itertools.product(range(size_y), range(size_x)):
+        ax[i, j].get_xaxis().set_visible(False)
+        ax[i, j].get_yaxis().set_visible(False)
+
+    for i in range(size_y):
+        for j in range(size_x):
+            ax[i, j].imshow(z_list[j][i][0],cmap='gray')
+
+    label = 'Perturbations on a test datapoint'
+    fig.text(0.5, 0.04, label, ha='center')
+
+    plt.savefig(path)
+    plt.show()
+
+
 
 MIN_LR0 = 0.0001 
-MAX_LR0 = 0.04 #step size for iterative method and attack method
+MAX_LR0 = 0.16 #0.04 #step size for iterative method and attack method
 #number of adversarial iterations
 T_ADV = 15
 
@@ -393,6 +466,10 @@ loss_function=nn.CrossEntropyLoss()
 model = Mnist_Estimateur(activation='elu')
 if USE_CUDA:
     model.cuda()
+    
+
+gammas = C2/np.array(range(5,505,5))
+show_samples(test_data_loader,gammas,max_lr0=0.3)
 
 #def plot_attack_error(models,test_data_loader,labels, p=2) :
 #    fig = plt.figure()
@@ -533,7 +610,7 @@ if False and __name__=='__main__':
 
 
 #%%
-if True and __name__=='__main__':
+if False and __name__=='__main__':
     # model = Mnist_Estimateur()
     # model,_= main.loadCheckpoint(model,'mnist_wrm_ep30')
     list_rhos=[]
@@ -575,3 +652,12 @@ if True and __name__=='__main__':
     # plt.title(r"$\hat\rho_{test}$ vs. $1/\gamma_{adv}$")
 
     # plt.legend()
+
+#%%
+if False and __name__=='__main__':
+    # model = Mnist_Estimateur()
+    # model,_= main.loadCheckpoint(model,'mnist_wrm_ep30')
+    list_rhos=[]
+    list_errors = []      
+
+    model,_= main.loadCheckpoint(model,'mnist_erm_ep30')
