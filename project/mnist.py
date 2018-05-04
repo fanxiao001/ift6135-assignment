@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Fri May 04 2018 02:06:12 GMT-0400 (EDT)
+# @last-modified Fri May 04 2018 12:42:17 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -337,7 +337,7 @@ def rho_vs_gamma(model, test_data_loader, max_lr0, random=False, get_err=False) 
 def attack_WRM_sample(model,x_list, gammas, max_lr0) :
     model.eval()
     loss_function = nn.CrossEntropyLoss()
-    T_adv = 30
+    T_adv = 15
 
     z_list=[]
     preds=[]
@@ -620,6 +620,7 @@ if False and __name__=='__main__':
 
 
 #%%
+# wrm attack, rho_vs_gamma
 if False and __name__=='__main__':
     # model = Mnist_Estimateur()
     # model,_= main.loadCheckpoint(model,'mnist_wrm_ep30')
@@ -668,4 +669,4 @@ if False and __name__=='__main__':
 if True and __name__=='__main__':
     # min gamma=c2/600,max_lr0=0.6, all model malclassify
     gammas = C2/np.array(range(5,905,5))
-    show_samples(test_data_loader,gammas,max_lr0=0.8)
+    show_samples(test_data_loader,gammas,max_lr0=0.5)
