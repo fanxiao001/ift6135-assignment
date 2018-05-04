@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Thu May 03 2018 23:51:22 GMT-0400 (EDT)
+# @last-modified Fri May 04 2018 02:06:12 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -337,7 +337,7 @@ def rho_vs_gamma(model, test_data_loader, max_lr0, random=False, get_err=False) 
 def attack_WRM_sample(model,x_list, gammas, max_lr0) :
     model.eval()
     loss_function = nn.CrossEntropyLoss()
-    T_adv = 15
+    T_adv = 30
 
     z_list=[]
     preds=[]
@@ -354,8 +354,8 @@ def attack_WRM_sample(model,x_list, gammas, max_lr0) :
             z_hat = x_.data.clone()
             if USE_CUDA:
                 z_hat = z_hat.cuda()
-            losses=[]
-            rhos=[]
+            # losses=[]
+            # rhos=[]
             z_hat = Variable(z_hat,requires_grad=True)
             #running the maximizer for z_hat
             optimizer_zt = torch.optim.Adam([z_hat], lr=max_lr0)
@@ -365,7 +365,7 @@ def attack_WRM_sample(model,x_list, gammas, max_lr0) :
                 out=model(z_hat)
                 _, pred = torch.max(out, 1)
                 if pred!=i:
-                    preds.append(pred)
+                    preds.append(pred[0].numpy())
                     z_list.append(z_hat.squeeze(0).data.cpu())
                     break
 
@@ -374,18 +374,19 @@ def attack_WRM_sample(model,x_list, gammas, max_lr0) :
                 # print(delta.size(),delta.view(-1).size())
                 rho = torch.norm(delta.view(-1))**2
                 loss=loss_function(out,y_)
-                losses.append(loss.data[0].numpy())
-                rhos.append(rho.data[0].numpy())
+                # losses.append(loss.data[0].numpy())
+                # rhos.append(rho.data[0].numpy())
                 loss_zt = - ( loss -  float(g) * rho)
                 loss_zt.backward()
                 optimizer_zt.step()
-                main.adjust_lr_zt(optimizer_zt,max_lr0, n+1)
+                main.adjust_lr_zt(optimizer_zt,max_lr0, n)
 
             if pred!=i:
                 break
             elif g==gammas[-1]:
-                preds.append(pred)
+                preds.append(pred[0].numpy())
                 z_list.append(z_hat.squeeze(0).data.cpu())
+                # print(torch.norm((z_hat - x_).view(-1))**2)
                 # print('LOSS',losses[-1])
                 # print('RHO',rhos[-1])
 
@@ -432,19 +433,31 @@ def show_samples(data_loader, gammas, max_lr0, path = 'result.png'):
     z_list.append(z_)
     
     
+    labels =['Original','ERM','FGM','IFGM','WRM']
     size_y= 10
     size_x = 5
     fig, ax = plt.subplots(size_y, size_x, figsize=(10, 20))
-    for i, j in itertools.product(range(size_y), range(size_x)):
-        ax[i, j].get_xaxis().set_visible(False)
-        ax[i, j].get_yaxis().set_visible(False)
-
     for i in range(size_y):
         for j in range(size_x):
+            ax[i, j].cla()
+            if j==0:
+                ax[i, j].set_xlabel(str(preds_list[j][i]))
+            else:
+                ax[i, j].set_xlabel('Predict '+str(preds_list[j][i]))
             ax[i, j].imshow(z_list[j][i][0],cmap='gray')
 
+    label='                             '.join(labels)
+    fig.text(0.51,0.1,label, ha='center')
     label = 'Perturbations on a test datapoint'
-    fig.text(0.5, 0.04, label, ha='center')
+    fig.text(0.52, 0.08, label, ha='center')
+
+    for i, j in itertools.product(range(size_y), range(size_x)):
+        # plt.setp(ax[i, j].get_xaxis().set_visible(False)
+        # plt.setp(ax[i, j].get_yaxis().set_visible(False)
+        plt.setp(ax[i, j].get_xticklabels(), visible=False)
+        plt.setp(ax[i, j].get_yticklabels(), visible=False)
+        ax[i, j].set_xticks([])  
+        ax[i, j].set_yticks([])
 
     plt.savefig(path)
     plt.show()
@@ -467,9 +480,6 @@ model = Mnist_Estimateur(activation='elu')
 if USE_CUDA:
     model.cuda()
     
-
-gammas = C2/np.array(range(5,505,5))
-show_samples(test_data_loader,gammas,max_lr0=0.3)
 
 #def plot_attack_error(models,test_data_loader,labels, p=2) :
 #    fig = plt.figure()
@@ -654,10 +664,8 @@ if False and __name__=='__main__':
     # plt.legend()
 
 #%%
-if False and __name__=='__main__':
-    # model = Mnist_Estimateur()
-    # model,_= main.loadCheckpoint(model,'mnist_wrm_ep30')
-    list_rhos=[]
-    list_errors = []      
-
-    model,_= main.loadCheckpoint(model,'mnist_erm_ep30')
+#show samples that all model malclassify
+if True and __name__=='__main__':
+    # min gamma=c2/600,max_lr0=0.6, all model malclassify
+    gammas = C2/np.array(range(5,905,5))
+    show_samples(test_data_loader,gammas,max_lr0=0.8)
