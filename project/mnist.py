@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Fri May 04 2018 12:42:17 GMT-0400 (EDT)
+# @last-modified Sat May 05 2018 00:43:25 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -334,10 +334,10 @@ def rho_vs_gamma(model, test_data_loader, max_lr0, random=False, get_err=False) 
     return np.array(range(5,105,5)),rhos, errors
 
 # get 0-9 samples after WRM attack
-def attack_WRM_sample(model,x_list, gammas, max_lr0) :
+def attack_WRM_sample(model,x_list, gammas, max_lr0,T_adv=15) :
     model.eval()
     loss_function = nn.CrossEntropyLoss()
-    T_adv = 15
+    # T_adv = 15
 
     z_list=[]
     preds=[]
@@ -362,6 +362,8 @@ def attack_WRM_sample(model,x_list, gammas, max_lr0) :
             loss_zt = 0 # phi(theta,z0)
             rho = 0 #E[c(Z,Z0)]
             for n in range(1,T_adv+1) :
+                delta = z_hat - x_
+                rho = torch.norm(delta.view(-1))**2
                 out=model(z_hat)
                 _, pred = torch.max(out, 1)
                 if pred!=i:
@@ -370,9 +372,6 @@ def attack_WRM_sample(model,x_list, gammas, max_lr0) :
                     break
 
                 optimizer_zt.zero_grad()
-                delta = z_hat - x_
-                # print(delta.size(),delta.view(-1).size())
-                rho = torch.norm(delta.view(-1))**2
                 loss=loss_function(out,y_)
                 # losses.append(loss.data[0].numpy())
                 # rhos.append(rho.data[0].numpy())
@@ -390,11 +389,11 @@ def attack_WRM_sample(model,x_list, gammas, max_lr0) :
                 # print('LOSS',losses[-1])
                 # print('RHO',rhos[-1])
 
-        print('digit=',i,'pred=',pred[0].numpy(),'loop=',n,'gamma=',g)
+        print('digit=',i,'pred=',pred[0].numpy(),'loop=',n,'rho=',rho.data.numpy(),'gamma=',g)
 
     return preds,z_list
 
-def show_samples(data_loader, gammas, max_lr0, path = 'result.png'):
+def show_samples(data_loader, gammas, max_lr0,T_adv=15, path = 'result.png'):
     
     preds_list=[]
     z_list=[]
@@ -413,22 +412,22 @@ def show_samples(data_loader, gammas, max_lr0, path = 'result.png'):
 
     model = Mnist_Estimateur(activation='elu')
     model,_= main.loadCheckpoint(model,'mnist_erm_ep30')
-    preds, z_ = attack_WRM_sample(model, x_list, gammas, max_lr0)
+    preds, z_ = attack_WRM_sample(model, x_list, gammas, max_lr0,T_adv=T_adv)
     preds_list.append(preds)
     z_list.append(z_)
     
     model,_= main.loadCheckpoint(model,'mnist_fgm_ep24')
-    preds, z_ = attack_WRM_sample(model, x_list, gammas, max_lr0)
+    preds, z_ = attack_WRM_sample(model, x_list, gammas, max_lr0,T_adv=T_adv)
     preds_list.append(preds)
     z_list.append(z_)
     
     model,_= main.loadCheckpoint(model,'mnist_ifgm_ep30')
-    preds, z_ = attack_WRM_sample(model, x_list, gammas, max_lr0)
+    preds, z_ = attack_WRM_sample(model, x_list, gammas, max_lr0,T_adv=T_adv)
     preds_list.append(preds)
     z_list.append(z_)
     
     model,_= main.loadCheckpoint(model,'mnist_wrm_ep27')
-    preds, z_ = attack_WRM_sample(model, x_list, gammas, max_lr0)
+    preds, z_ = attack_WRM_sample(model, x_list, gammas, max_lr0,T_adv=T_adv)
     preds_list.append(preds)
     z_list.append(z_)
     
@@ -669,4 +668,4 @@ if False and __name__=='__main__':
 if True and __name__=='__main__':
     # min gamma=c2/600,max_lr0=0.6, all model malclassify
     gammas = C2/np.array(range(5,905,5))
-    show_samples(test_data_loader,gammas,max_lr0=0.5)
+    show_samples(test_data_loader,gammas,max_lr0=0.5,T_adv=15)
