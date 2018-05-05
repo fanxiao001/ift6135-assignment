@@ -5,7 +5,7 @@
 # mnist.py
 # @author Zhibin.LU
 # @created Mon Apr 23 2018 17:19:42 GMT-0400 (EDT)
-# @last-modified Sat May 05 2018 00:43:25 GMT-0400 (EDT)
+# @last-modified Sat May 05 2018 01:04:36 GMT-0400 (EDT)
 # @website: https://louis-udm.github.io
 # @description 
 # # # #
@@ -334,7 +334,7 @@ def rho_vs_gamma(model, test_data_loader, max_lr0, random=False, get_err=False) 
     return np.array(range(5,105,5)),rhos, errors
 
 # get 0-9 samples after WRM attack
-def attack_WRM_sample(model,x_list, gammas, max_lr0,T_adv=15) :
+def attack_WRM_sample2(model,x_list, gammas, max_lr0,T_adv=15) :
     model.eval()
     loss_function = nn.CrossEntropyLoss()
     # T_adv = 15
@@ -347,7 +347,6 @@ def attack_WRM_sample(model,x_list, gammas, max_lr0,T_adv=15) :
         if USE_CUDA:
             x_, y_ = x_.cuda(), y_.cuda()
         x_, y_  = Variable(x_), Variable(y_)
-
 
         for g in gammas:
             #initialize z_hat with x_
@@ -381,6 +380,63 @@ def attack_WRM_sample(model,x_list, gammas, max_lr0,T_adv=15) :
                 main.adjust_lr_zt(optimizer_zt,max_lr0, n)
 
             if pred!=i:
+                break
+            elif g==gammas[-1]:
+                preds.append(pred[0].numpy())
+                z_list.append(z_hat.squeeze(0).data.cpu())
+                # print(torch.norm((z_hat - x_).view(-1))**2)
+                # print('LOSS',losses[-1])
+                # print('RHO',rhos[-1])
+
+        print('digit=',i,'pred=',pred[0].numpy(),'loop=',n,'rho=',rho.data.numpy(),'gamma=',g)
+
+    return preds,z_list
+
+# get 0-9 samples after WRM attack
+def attack_WRM_sample(model,x_list, gammas, max_lr0,T_adv=15) :
+    model.eval()
+    loss_function = nn.CrossEntropyLoss()
+    # T_adv = 15
+
+    z_list=[]
+    preds=[]
+    for i,x_ in enumerate(x_list):
+        x_=x_.unsqueeze(0)
+        y_=torch.LongTensor([i])
+        if USE_CUDA:
+            x_, y_ = x_.cuda(), y_.cuda()
+        x_, y_  = Variable(x_), Variable(y_)
+
+        for g in gammas:
+            #initialize z_hat with x_
+            z_hat = x_.data.clone()
+            if USE_CUDA:
+                z_hat = z_hat.cuda()
+            # losses=[]
+            # rhos=[]
+            z_hat = Variable(z_hat,requires_grad=True)
+            #running the maximizer for z_hat
+            optimizer_zt = torch.optim.Adam([z_hat], lr=max_lr0)
+            loss_zt = 0 # phi(theta,z0)
+            rho = 0 #E[c(Z,Z0)]
+            for n in range(1,T_adv+1) :
+                delta = z_hat - x_
+                rho = torch.norm(delta.view(-1))**2
+                out=model(z_hat)
+                _, pred = torch.max(out, 1)
+
+                optimizer_zt.zero_grad()
+                loss=loss_function(out,y_)
+                # losses.append(loss.data[0].numpy())
+                # rhos.append(rho.data[0].numpy())
+                loss_zt = - ( loss -  float(g) * rho)
+                loss_zt.backward()
+                optimizer_zt.step()
+                main.adjust_lr_zt(optimizer_zt,max_lr0, n)
+
+            if pred!=i:
+                preds.append(pred[0].numpy())
+                z_list.append(z_hat.squeeze(0).data.cpu())
                 break
             elif g==gammas[-1]:
                 preds.append(pred[0].numpy())
